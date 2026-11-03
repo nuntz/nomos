@@ -76,7 +76,12 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _write_tags(args: argparse.Namespace) -> int:
-    outcomes = write_tags(Report.load(args.report), iptc=args.iptc, warn=_warn)
+    outcomes = write_tags(
+        Report.load(args.report),
+        iptc=args.iptc,
+        warn=_warn,
+        on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
+    )
     print(write_summary(outcomes))
     return 0
 
