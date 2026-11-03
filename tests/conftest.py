@@ -16,6 +16,9 @@ ADM0 (Countries)
   Falkland Islands (UK)  117  shapeType DISP, [-60, -58] x [-52, -51]
   South Sudan   SSD  [30, 35] x [5, 10]
   Sudan         SDN  [30, 35] x [10, 15]
+  Russia        RUS  [-180, -175] x [65, 70]    (nothing east of 180 at these latitudes)
+  Uganda        UGA  [34, 36] x [-1, 1]
+  Kenya         KEN  [36, 38] x [-1, 1]         shares lon 36 with Uganda
 
 ADM1 (Regions)
   British Columbia     CAN  [-130, -120] x [50, 60]   shares lon -120 with Alberta
@@ -30,6 +33,10 @@ ADM1 (Regions)
                             (as in CGAZ: a non-ISO shapeGroup, in both layers)
   Upper Nile           SSD  [30, 35] x [5, 9.5]
   Kordofan             SDN  [30, 35] x [9.5, 15]  (9.5..10 lies in ADM0 South Sudan)
+  Chukotka             RUS  Russia's square
+  Eastern              UGA  Uganda's square
+  Rift Valley          KEN  [36.06, 38] x [-1, 1]  (Kenya strip 36..36.06 has no ADM1, and
+                            Uganda's Eastern is nearer to it than Rift Valley)
 
 The sea west of lon -130 is the coastline gap for Nearby match tests
 (at lat 55, 5 km is about 0.078 degrees of longitude).

@@ -4,13 +4,13 @@
   "files": {
     "ADM0": {
       "url": "fixtureCGAZ_ADM0.geojson",
-      "bytes": 2975,
-      "sha256": "b33c03d998508ec5954d5571de0bb2667503524dee4b5f8c92c403aab005ed3c"
+      "bytes": 3712,
+      "sha256": "7cd85ce0cf843d3a391d825af4f75a149c6064f30fedff2ea59568be80734c12"
     },
     "ADM1": {
       "url": "fixtureCGAZ_ADM1.geojson",
-      "bytes": 3472,
-      "sha256": "9f953c7aa5361de59487dea774328333a97fe7e869cae2df859bf058d24f30df"
+      "bytes": 4308,
+      "sha256": "eda660d8c6445b689cedb96f8ccef4710976f4e34d5b00f0d867c3938cc7af89"
     }
   }
 }

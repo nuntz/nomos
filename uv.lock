@@ -65,6 +65,7 @@ source = { editable = "." }
 dependencies = [
     { name = "geopandas" },
     { name = "pyogrio" },
+    { name = "pyproj" },
     { name = "shapely" },
 ]
 
@@ -78,6 +79,7 @@ dev = [
 requires-dist = [
     { name = "geopandas", specifier = ">=1.0" },
     { name = "pyogrio", specifier = ">=0.10" },
+    { name = "pyproj", specifier = ">=3.6" },
     { name = "shapely", specifier = ">=2.0" },
 ]
 
