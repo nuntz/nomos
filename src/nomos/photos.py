@@ -1,5 +1,6 @@
 """Finding the photos in a Photo library and reading their GPS coordinates."""
 
+import os
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import batched
@@ -33,10 +34,23 @@ class GpsReading:
 
 
 def discover_photos(library: Path) -> list[Path]:
-    """The JPEG photos in a Photo library, sorted."""
-    return sorted(
-        path for path in library.rglob("*") if path.suffix.lower() in JPEG_SUFFIXES and path.is_file()
-    )
+    """The JPEG photos in a Photo library and all its subfolders, sorted.
+
+    Matches .jpg and .jpeg in any letter case. Skips hidden files and folders (which covers
+    macOS "._" resource files) and never follows symlinks, so links can't add photos from
+    outside the library or loop.
+    """
+    photos = []
+    for folder, subfolders, files in os.walk(library, followlinks=False):
+        subfolders[:] = [name for name in subfolders if not name.startswith(".")]
+        for name in files:
+            path = Path(folder, name)
+            if name.startswith(".") or path.suffix.lower() not in JPEG_SUFFIXES:
+                continue
+            if path.is_symlink() or not path.is_file():
+                continue
+            photos.append(path)
+    return sorted(photos)
 
 
 def read_gps(exiftool: ExifTool, photos: Sequence[Path]) -> Iterator[tuple[Path, GpsReading]]:

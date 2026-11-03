@@ -116,3 +116,36 @@ def test_exif_gps_takes_precedence_over_xmp_gps(resolve, tmp_path):
     records = resolve(library)
 
     assert records["both.jpg"]["region"] == "British Columbia"
+
+
+def test_resolve_finds_jpegs_in_nested_subfolders_with_any_letter_case(resolve, tmp_path):
+    library = tmp_path / "library"
+    for name in ("DCIM/100CANON/IMG_0001.JPG", "DCIM/100CANON/IMG_0002.jpeg", "DCIM/101MSDCF/deep/a.JpG", "b.JPEG"):
+        make_geotagged_jpeg(library / name, 55.5, -125.25)
+    (library / "DCIM" / "100CANON" / "notes.txt").write_text("not a photo")
+    make_jpeg(library / "DCIM" / "100CANON" / "IMG_0003.png")
+
+    records = resolve(library)
+
+    assert sorted(records) == [
+        "DCIM/100CANON/IMG_0001.JPG",
+        "DCIM/100CANON/IMG_0002.jpeg",
+        "DCIM/101MSDCF/deep/a.JpG",
+        "b.JPEG",
+    ]
+
+
+def test_resolve_skips_hidden_files_macos_resource_files_and_symlinks(resolve, tmp_path):
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "DCIM" / "IMG_0001.JPG", 55.5, -125.25)
+    make_geotagged_jpeg(library / "DCIM" / ".hidden.jpg", 55.5, -125.25)
+    make_geotagged_jpeg(library / ".Trashes" / "501" / "deleted.jpg", 55.5, -125.25)
+    (library / "DCIM" / "._IMG_0001.JPG").write_bytes(b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        ")
+    outside = make_geotagged_jpeg(tmp_path / "outside" / "elsewhere.jpg", 55.5, -125.25)
+    (library / "DCIM" / "link.jpg").symlink_to(outside)
+    (library / "DCIM" / "linked-folder").symlink_to(outside.parent, target_is_directory=True)
+    (library / "DCIM" / "loop").symlink_to(library, target_is_directory=True)
+
+    records = resolve(library)
+
+    assert sorted(records) == ["DCIM/IMG_0001.JPG"]
