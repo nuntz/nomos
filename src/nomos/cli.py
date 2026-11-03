@@ -1,6 +1,7 @@
 """The `nomos` command line: build-index, resolve and write-tags."""
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from nomos.exiftool import find_exiftool
 from nomos.report import DEFAULT_REPORT, Report
 from nomos.resolve import resolve_library
 from nomos.write import summary as write_summary
-from nomos.write import write_tags
+from nomos.write import WriteOutcome, write_tags
 
 
 ATTRIBUTION = "Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0."
@@ -55,6 +56,17 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also write the legacy IPTC-IIM location fields, in UTF-8, for older software",
     )
+    write_tags.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace Locations that Nomos wrote earlier (for example from an older Dataset release); "
+        "Locations from any other source are never replaced",
+    )
+    write_tags.add_argument(
+        "--in-place",
+        action="store_true",
+        help="write without keeping ExifTool's <photo>_original backups",
+    )
     return parser
 
 
@@ -80,8 +92,28 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _write_tags(args: argparse.Namespace) -> int:
-    outcomes = write_tags(Report.load(args.report), iptc=args.iptc, warn=_warn)
-    print(write_summary(outcomes))
+    report = Report.load(args.report)
+    outcomes = write_tags(
+        report,
+        iptc=args.iptc,
+        overwrite=args.overwrite,
+        in_place=args.in_place,
+        warn=_warn,
+        on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
+    )
+    if outcomes[WriteOutcome.WRITTEN] and not args.in_place:
+        remove = f"exiftool -r '-delete_original!' {shlex.quote(str(report.library_root))}"
+        print(
+            "ExifTool kept each written photo's original as <photo>_original. "
+            f"Once you have checked the result, remove the backups with: {remove}"
+        )
+    if stale := outcomes[WriteOutcome.SKIPPED_STALE]:
+        noun = "photo was" if stale == 1 else "photos were"
+        print(
+            f"{stale} {noun} missing or re-geotagged since the report was made. "
+            f"Re-run `nomos resolve` on the library and review the new report to tag them."
+        )
+    print(write_summary(outcomes))  # always the last line
     return 0
 
 
