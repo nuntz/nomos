@@ -138,7 +138,10 @@ class BoundaryIndex:
         # 3 and 4. A point in at least one Region is matched or ambiguous.
         if regions:
             return self._resolve_regions(regions, countries)
-        # 5 (a Nearby match) and 6 (a Country-only Location) are tried here, before no match.
+        # 5. A Nearby match (#7) goes here, before the Country-only Location of step 6.
+        # 6. A point in a Country but in no Region gets a Country-only Location.
+        if countries:
+            return self._resolve_countries(countries)
         return LookupResult(LookupStatus.NO_MATCH)
 
     def _resolve_regions(self, regions: list[_Unit], countries: list[_Unit]) -> LookupResult:
@@ -153,6 +156,15 @@ class BoundaryIndex:
             self._country_location(country) for country in countries if country.shape_group not in region_countries
         ]
         return LookupResult(LookupStatus.AMBIGUOUS, candidates=tuple(candidates))
+
+    def _resolve_countries(self, countries: list[_Unit]) -> LookupResult:
+        """Country only when exactly one Country contains the point. A point on a border between
+        Countries, in no Region, is ambiguous between them."""
+        if len(countries) == 1:
+            return LookupResult(LookupStatus.COUNTRY_ONLY, self._country_location(countries[0]))
+        return LookupResult(
+            LookupStatus.AMBIGUOUS, candidates=tuple(self._country_location(country) for country in countries)
+        )
 
     def _region_location(self, region: _Unit) -> Location:
         return Location(
