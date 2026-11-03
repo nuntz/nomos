@@ -92,12 +92,16 @@ class ExifTool:
         records = json.loads(stdout) if stdout.strip() else []
         return {by_name[record.pop("SourceFile")]: record for record in records}
 
-    def write(self, photo: Path, values: Mapping[str, str | None]) -> None:
+    def write(self, photo: Path, values: Mapping[str, str | None], keep_backup: bool = True) -> None:
         """Write tag values into a photo. Fails unless ExifTool reports the photo updated or unchanged.
 
         A value of None deletes the tag; an empty string writes the tag with an empty value.
+        With keep_backup, ExifTool keeps the original file as "<photo>_original"; it never replaces
+        an existing backup, so that always holds the photo as it was before the first write.
         """
-        stdout, stderr = self.execute(*(_assignment(tag, value) for tag, value in values.items()), photo)
+        options = [] if keep_backup else ["-overwrite_original"]
+        assignments = (_assignment(tag, value) for tag, value in values.items())
+        stdout, stderr = self.execute(*options, *assignments, photo)
         if "Error" in stderr or ("1 image files updated" not in stdout and "1 image files unchanged" not in stdout):
             raise ExifToolError(f"ExifTool could not write {photo}: {(stderr or stdout).strip()}")
 

@@ -143,6 +143,7 @@ def write_tags(
     report: Report,
     iptc: bool = False,
     overwrite: bool = False,
+    in_place: bool = False,
     warn: Callable[[str], None] = lambda message: None,
     on_outcome: Callable[[PhotoRecord, WriteOutcome], None] = lambda record, outcome: None,
 ) -> Counter[WriteOutcome]:
@@ -154,6 +155,8 @@ def write_tags(
     A photo that already has a Location is skipped, unless overwrite is set and the photo
     carries the Nomos namespace: then Nomos wrote that Location, and it is replaced.
 
+    ExifTool keeps a "<photo>_original" backup of each written photo, unless in_place is set.
+
     Each photo's Write outcome is passed to on_outcome as soon as it is known.
 
     With iptc, the legacy IPTC-IIM location fields are written too, except into a photo whose
@@ -162,7 +165,7 @@ def write_tags(
     outcomes: Counter[WriteOutcome] = Counter()
     with ExifTool() as exiftool:
         for record in report.photos:
-            outcome = _write_photo(exiftool, report, record, iptc, overwrite, warn)
+            outcome = _write_photo(exiftool, report, record, iptc, overwrite, in_place, warn)
             outcomes[outcome] += 1
             on_outcome(record, outcome)
     return outcomes
@@ -174,6 +177,7 @@ def _write_photo(
     record: PhotoRecord,
     iptc: bool,
     overwrite: bool,
+    in_place: bool,
     warn: Callable[[str], None],
 ) -> WriteOutcome:
     location = record.result.location
@@ -199,7 +203,7 @@ def _write_photo(
         tags = replacement(current, tags)
         if tags is None:
             return WriteOutcome.SKIPPED_EXISTING
-    exiftool.write(photo, tags)
+    exiftool.write(photo, tags, keep_backup=not in_place)
     return WriteOutcome.WRITTEN
 
 

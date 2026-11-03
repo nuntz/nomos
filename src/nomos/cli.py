@@ -1,6 +1,7 @@
 """The `nomos` command line: build-index, resolve and write-tags."""
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
@@ -57,6 +58,11 @@ def _parser() -> argparse.ArgumentParser:
         help="replace Locations that Nomos wrote earlier (for example from an older Dataset release); "
         "Locations from any other source are never replaced",
     )
+    write_tags.add_argument(
+        "--in-place",
+        action="store_true",
+        help="write without keeping ExifTool's <photo>_original backups",
+    )
     return parser
 
 
@@ -82,10 +88,12 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _write_tags(args: argparse.Namespace) -> int:
+    report = Report.load(args.report)
     outcomes = write_tags(
-        Report.load(args.report),
+        report,
         iptc=args.iptc,
         overwrite=args.overwrite,
+        in_place=args.in_place,
         warn=_warn,
         on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
     )
@@ -95,6 +103,12 @@ def _write_tags(args: argparse.Namespace) -> int:
         print(
             f"{stale} {noun} missing or re-geotagged since the report was made. "
             f"Re-run `nomos resolve` on the library and review the new report to tag them."
+        )
+    if outcomes[WriteOutcome.WRITTEN] and not args.in_place:
+        remove = f"exiftool -r '-delete_original!' {shlex.quote(str(report.library_root))}"
+        print(
+            "ExifTool kept each written photo's original as <photo>_original. "
+            f"Once you have checked the result, remove the backups with: {remove}"
         )
     return 0
 

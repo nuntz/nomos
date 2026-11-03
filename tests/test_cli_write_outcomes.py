@@ -173,3 +173,29 @@ def test_no_resolve_hint_when_no_photo_is_stale(nomos, tmp_path):
     result = nomos("write-tags", str(report))
 
     assert "nomos resolve" not in result.stdout
+
+
+def test_write_tags_keeps_a_backup_of_each_written_photo_and_says_how_to_remove_them(nomos, tmp_path):
+    library = tmp_path / "library"
+    photo = make_geotagged_jpeg(library / "DCIM" / "lyon.jpg", *LYON)
+    original = photo.read_bytes()
+    report = resolve(nomos, library)
+
+    result = nomos("write-tags", str(report))
+
+    backup = library / "DCIM" / "lyon.jpg_original"
+    assert backup.read_bytes() == original
+    assert f"exiftool -r '-delete_original!' {library.resolve()}" in result.stdout
+
+
+def test_write_tags_in_place_keeps_no_backups(nomos, tmp_path):
+    library = tmp_path / "library"
+    photo = make_geotagged_jpeg(library / "lyon.jpg", *LYON)
+    report = resolve(nomos, library)
+
+    result = nomos("write-tags", "--in-place", str(report))
+
+    assert "written lyon.jpg" in result.stdout.splitlines()
+    assert read_tags(photo, "XMP-photoshop:State") == {"XMP-photoshop:State": "Auvergne-Rhône-Alpes"}
+    assert sorted(path.name for path in library.iterdir()) == ["lyon.jpg"]
+    assert "delete_original" not in result.stdout
