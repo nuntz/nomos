@@ -6,7 +6,10 @@ import pytest
 
 from conftest import FIXTURE_DATASET
 from nomos.boundary_index import BoundaryDataError, BoundaryIndex
-from nomos.location import LookupStatus
+from nomos.location import Location, LookupStatus
+
+BRITISH_COLUMBIA = Location("Canada", "CA", "British Columbia", "fixture-CAN-BC")
+ALBERTA = Location("Canada", "CA", "Alberta", "fixture-CAN-AB")
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +60,14 @@ def test_points_on_both_sides_of_the_antimeridian_and_exactly_on_it_are_matched(
     assert result.location.region == "Northern"
     assert result.location.country == "Fiji"
     assert result.location.country_code == "FJ"
+
+
+def test_point_on_an_edge_shared_by_two_regions_is_ambiguous_and_lists_both(index):
+    result = index.lookup(55.0, -120.0)
+
+    assert result.status is LookupStatus.AMBIGUOUS
+    assert result.location is None
+    assert set(result.candidates) == {BRITISH_COLUMBIA, ALBERTA}
 
 
 def rewrite_coordinates(source, dest, transform):

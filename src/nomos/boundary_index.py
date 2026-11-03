@@ -110,6 +110,9 @@ class BoundaryIndex:
         matched = sorted({int(i) for i in self._component_region[hits]})
         if len(matched) == 1:
             return LookupResult(LookupStatus.MATCHED, self._location(self._regions[matched[0]]))
+        if len(matched) > 1:
+            candidates = tuple(self._location(self._regions[i]) for i in matched)
+            return LookupResult(LookupStatus.AMBIGUOUS, candidates=candidates)
         return LookupResult(LookupStatus.NO_MATCH)
 
     def _location(self, region: _Region) -> Location:
