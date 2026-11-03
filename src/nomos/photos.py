@@ -53,8 +53,18 @@ def discover_photos(library: Path) -> list[Path]:
     return sorted(photos)
 
 
+def read_photo_gps(exiftool: ExifTool, photo: Path) -> GpsReading:
+    """Read one photo's GPS coordinates, exactly as `resolve` reads them.
+
+    Use it to compare a photo's current coordinates with a report's. A photo ExifTool cannot
+    read (including a missing one) reads as no GPS, so check that the file exists first.
+    """
+    ((_, reading),) = read_gps(exiftool, [photo])
+    return reading
+
+
 def read_gps(exiftool: ExifTool, photos: Sequence[Path]) -> Iterator[tuple[Path, GpsReading]]:
-    """Read each photo's GPS coordinates, in order."""
+    """Read each photo's GPS coordinates, in order, in batches."""
     for batch in batched(photos, READ_BATCH):
         tags = exiftool.read(batch, _GPS_TAGS)
         for photo in batch:
