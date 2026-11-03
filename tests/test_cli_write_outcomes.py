@@ -112,6 +112,37 @@ def test_overwrite_keeps_a_location_entered_by_hand(nomos, tmp_path):
     }
 
 
+IIM_LOCATION = ("IPTC:Province-State", "IPTC:Country-PrimaryLocationName", "IPTC:Country-PrimaryLocationCode")
+
+
+@pytest.mark.parametrize("options", [[], ["--iptc"]], ids=["xmp only", "with iptc"])
+def test_overwrite_keeps_an_iim_location_entered_by_hand_after_nomos_tagged_the_photo(nomos, tmp_path, options):
+    photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
+    tag_with_an_older_nomos_run(nomos, tmp_path / "library", "lyon.jpg")
+    exiftool("-overwrite_original", "-IPTC:Province-State=Rhône", photo)  # by hand, in older software
+    before = read_tags(photo, *XMP_LOCATION, *IIM_LOCATION, "XMP-nomos:all")
+    report = resolve(nomos, tmp_path / "library")
+
+    result = nomos("write-tags", "--overwrite", *options, str(report))
+
+    assert "skipped_existing lyon.jpg" in result.stdout.splitlines()
+    assert read_tags(photo, *XMP_LOCATION, *IIM_LOCATION, "XMP-nomos:all") == before
+    assert before["IPTC:Province-State"] == "Rhône"
+
+
+def test_overwrite_without_iptc_removes_the_iim_location_nomos_wrote(nomos, tmp_path):
+    photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
+    tag_with_an_older_nomos_run(nomos, tmp_path / "library", "lyon.jpg", "--iptc")
+    assert read_tags(photo, "IPTC:Province-State") == {"IPTC:Province-State": "Rhône-Alpes"}
+    report = resolve(nomos, tmp_path / "library")
+
+    result = nomos("write-tags", "--overwrite", str(report))
+
+    assert "written lyon.jpg" in result.stdout.splitlines()
+    assert read_tags(photo, *IIM_LOCATION) == {}
+    assert read_tags(photo, "XMP-photoshop:State") == {"XMP-photoshop:State": "Auvergne-Rhône-Alpes"}
+
+
 def test_overwrite_with_a_country_only_location_removes_the_stale_region(nomos, tmp_path):
     photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
     tag_with_an_older_nomos_run(nomos, tmp_path / "library", "lyon.jpg", "--iptc")  # IIM fields too

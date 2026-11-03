@@ -119,8 +119,16 @@ def has_location(current: dict) -> bool:
 
 
 def written_by_nomos(current: dict) -> bool:
-    """Whether a photo carries the Nomos namespace (ADR 0001). RegionID alone may be empty."""
-    return any(_current_text(current, tag) for tag in ("XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus"))
+    """Whether a photo's Location is the one Nomos wrote, so --overwrite may replace it.
+
+    The photo must carry the Nomos namespace (ADR 0001; RegionID alone may be empty). Nomos
+    writes the same Location into XMP and IIM, so an IIM location field holding a value other
+    than its XMP field's means that Location was entered by hand since, and is not replaced.
+    """
+    tagged = any(_current_text(current, tag) for tag in ("XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus"))
+    return tagged and all(
+        _current_text(current, field.iim) in ("", _current_text(current, field.xmp)) for field in LOCATION_FIELDS
+    )
 
 
 def is_stale(exiftool: ExifTool, photo: Path, record: PhotoRecord) -> bool:
@@ -168,10 +176,10 @@ def write_tags(
     Each photo's GPS is re-read first: a photo that is missing, or whose coordinates changed
     since the report was made, is skipped as stale.
 
-    A photo that already has a Location is skipped, unless overwrite is set and the photo
-    carries the Nomos namespace: then Nomos wrote that Location, and it is replaced. Replacing
-    removes every location field the new Location leaves out, in XMP and IIM alike, so a stale
-    Region never survives; without iptc, that includes any IIM location fields.
+    A photo that already has a Location is skipped, unless overwrite is set and Nomos wrote that
+    Location (see written_by_nomos): then it is replaced. Replacing removes every location field
+    the new Location leaves out, in XMP and IIM alike, so a stale Region never survives; without
+    iptc, that includes the IIM location fields Nomos wrote.
 
     ExifTool keeps a "<photo>_original" backup of each written photo, unless in_place is set.
 
