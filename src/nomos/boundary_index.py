@@ -4,6 +4,7 @@ This is a deep module with a small interface: build it from a Dataset release's 
 ADM1 files (or load a saved one), then call `lookup(lat, lon)`.
 """
 
+import math
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,6 +102,8 @@ class BoundaryIndex:
 
     def lookup(self, lat: float, lon: float) -> LookupResult:
         """Resolve a coordinate to a Lookup status and, where there is one, a Location."""
+        if (reason := _invalid_input_reason(lat, lon)) is not None:
+            return LookupResult(LookupStatus.INVALID_INPUT, reason=reason)
         point = shapely.Point(lon, lat)
         # covered_by: a point on a boundary counts as inside. A bounding-box hit alone is never a match.
         hits = self._tree.query(point, predicate="covered_by")
@@ -116,6 +119,16 @@ class BoundaryIndex:
             region=region.name,
             region_id=region.shape_id,
         )
+
+
+def _invalid_input_reason(lat: float, lon: float) -> str | None:
+    """Why a coordinate makes no sense, or None if it is finite and in range."""
+    for name, value, limit in (("latitude", lat, 90), ("longitude", lon, 180)):
+        if not math.isfinite(value):
+            return f"{name} {value!r} is not a finite number"
+        if not -limit <= value <= limit:
+            return f"{name} {value!r} is outside [-{limit}, {limit}]"
+    return None
 
 
 def _check_lon_lat(layer: str, bounds) -> None:

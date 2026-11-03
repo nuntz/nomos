@@ -100,3 +100,36 @@ def test_building_tolerates_float_noise_just_beyond_180_but_not_more(tmp_path):
     assert BoundaryIndex.build(adm0=noisy, adm1=adm1).lookup(-17.0, 180.0).status is LookupStatus.MATCHED
     with pytest.raises(BoundaryDataError, match="ADM0"):
         BoundaryIndex.build(adm0=beyond, adm1=adm1)
+
+
+@pytest.mark.parametrize(
+    "lat, lon, reason",
+    [
+        (float("nan"), -125.0, "latitude"),
+        (55.0, float("nan"), "longitude"),
+        (float("inf"), -125.0, "latitude"),
+        (55.0, float("-inf"), "longitude"),
+        (-125.0, 55.0, "latitude"),  # British Columbia with latitude and longitude swapped
+        (90.5, 0.0, "latitude"),
+        (-90.5, 0.0, "latitude"),
+        (0.0, 180.5, "longitude"),
+        (0.0, -180.5, "longitude"),
+    ],
+    ids=["NaN latitude", "NaN longitude", "infinite latitude", "infinite longitude",
+         "swapped latitude and longitude", "latitude above 90", "latitude below -90",
+         "longitude above 180", "longitude below -180"],
+)
+def test_coordinates_that_are_not_finite_or_out_of_range_are_invalid_input_with_a_reason(
+    index, lat, lon, reason
+):
+    result = index.lookup(lat, lon)
+
+    assert result.status is LookupStatus.INVALID_INPUT
+    assert reason in result.reason
+    assert result.location is None
+    assert result.candidates == ()
+
+
+@pytest.mark.parametrize("lat, lon", [(90.0, 0.0), (-90.0, 0.0)], ids=["North Pole", "South Pole"])
+def test_the_poles_are_valid_input(index, lat, lon):
+    assert index.lookup(lat, lon).status is not LookupStatus.INVALID_INPUT
