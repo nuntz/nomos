@@ -18,13 +18,15 @@ boundary in the comment. A row states the Lookup status and the whole expected L
 None), for an ambiguous lookup every candidate, and for a Nearby match its distance in metres.
 """
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
-from conftest import NOMOS_EXECUTABLE
+from conftest import NOMOS_EXECUTABLE, make_geotagged_jpeg
 from nomos.boundary_index import BoundaryIndex
 from nomos.dataset import MANIFEST_ENV, Manifest, load_index
 from nomos.location import Location, LookupStatus
@@ -117,16 +119,37 @@ GOLDEN = [
 ]
 
 
-@pytest.fixture(scope="session")
-def v6_index() -> BoundaryIndex:
-    """The boundary index of the packaged Dataset release, built through `nomos build-index`."""
-    manifest = Manifest.packaged()
-    assert manifest.release == "v6.0.0"
+def run_nomos(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run the installed `nomos` CLI with the packaged manifest."""
     env = {name: value for name, value in os.environ.items() if name != MANIFEST_ENV}
-    built = subprocess.run([NOMOS_EXECUTABLE, "build-index"], env=env, capture_output=True, text=True)
-    if built.returncode != 0:
-        pytest.fail(f"nomos build-index failed\nstdout:\n{built.stdout}\nstderr:\n{built.stderr}")
-    return load_index(manifest)
+    result = subprocess.run([NOMOS_EXECUTABLE, *args], env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        pytest.fail(f"nomos {' '.join(args)} failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
+    return result
+
+
+@pytest.fixture(scope="session")
+def build_index() -> subprocess.CompletedProcess[str]:
+    """`nomos build-index` with the packaged manifest: it verifies the download against the
+    pinned sizes and SHA-256 checksums (downloading what is missing), then builds the index."""
+    return run_nomos("build-index")
+
+
+@pytest.fixture(scope="session")
+def v6_index(build_index) -> BoundaryIndex:
+    """The boundary index of the packaged Dataset release, built through `nomos build-index`."""
+    return load_index(Manifest.packaged())
+
+
+def test_photos_are_resolved_against_the_pinned_dataset_release_v6_0_0(build_index, tmp_path: Path):
+    make_geotagged_jpeg(tmp_path / "library" / "vancouver.jpg", 49.28, -123.12)
+
+    run_nomos("resolve", str(tmp_path / "library"), "--report", str(tmp_path / "report.json"))
+
+    assert "Dataset release v6.0.0" in build_index.stdout
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert report["dataset_release"] == "v6.0.0"
+    assert [record["region_id"] for record in report["photos"]] == [BRITISH_COLUMBIA.region_id]
 
 
 @pytest.mark.parametrize("golden", GOLDEN, ids=lambda golden: golden.case)
