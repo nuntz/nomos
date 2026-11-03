@@ -15,8 +15,7 @@ them and downloads nothing. CI runs this suite on a schedule and when the manife
 To add a case, add a row to GOLDEN. Every coordinate that the spec does not give is chosen and
 verified against v6.0.0 when the row is written, never guessed; note the margin to the nearest
 boundary in the comment. A row states the Lookup status and the whole expected Location (or
-None), and for an ambiguous lookup every candidate. Rows for later Lookup statuses that need
-more (the distance of a Nearby match) add an optional field to Golden and an assertion for it.
+None), for an ambiguous lookup every candidate, and for a Nearby match its distance in metres.
 """
 
 import os
