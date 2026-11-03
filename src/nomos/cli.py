@@ -4,8 +4,11 @@ import argparse
 import sys
 from pathlib import Path
 
+from nomos.dataset import Manifest, build_index, load_index
 from nomos.errors import NomosError
 from nomos.exiftool import find_exiftool
+from nomos.report import DEFAULT_REPORT
+from nomos.resolve import resolve_library
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -31,7 +34,7 @@ def _parser() -> argparse.ArgumentParser:
     resolve.add_argument(
         "--report",
         type=Path,
-        default=Path("nomos-report.json"),
+        default=DEFAULT_REPORT,
         help="where to write the report (default: ./nomos-report.json)",
     )
 
@@ -44,11 +47,35 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_index(args: argparse.Namespace) -> int:
+    manifest = Manifest.load()
+    index_path = build_index(manifest)
+    print(f"Boundary index for Dataset release {manifest.release} written to {index_path}")
+    return 0
+
+
+def _resolve(args: argparse.Namespace) -> int:
+    manifest = Manifest.load()
+    index = load_index(manifest)
+    report = resolve_library(args.library, index, manifest.release)
+    report.save(args.report)
+    print(f"Report written to {args.report}")
+    print(report.summary())
+    return 0
+
+
+def _write_tags(args: argparse.Namespace) -> int:
+    raise NotImplementedError
+
+
+_COMMANDS = {"build-index": _build_index, "resolve": _resolve, "write-tags": _write_tags}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         find_exiftool()
-        raise NotImplementedError(args.command)
+        return _COMMANDS[args.command](args)
     except NomosError as error:
         print(f"nomos: error: {error}", file=sys.stderr)
         return 1
