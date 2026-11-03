@@ -55,9 +55,4 @@ manifest, and re-run the golden suite.
 ## Boundary data
 
 Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0. Nomos does not ship the data;
-`resolve` processes every JPEG (`.jpg` or `.jpeg`, in any letter case) in the Photo library and
-all its subfolders. It skips hidden files and hidden folders, whose names start with `.`: this
-keeps macOS `._` resource files and the `.Trashes` and `.Spotlight-V100` folders on SD cards out
-of the report. It never follows symlinks, so a link cannot add photos from outside the library.
-
 `build-index` downloads it. See `NOTICE` for the full attribution.
