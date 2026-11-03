@@ -41,6 +41,7 @@ class Golden:
     status: LookupStatus
     location: Location | None = None
     candidates: frozenset[Location] = frozenset()
+    distance_m: float | None = None  # a Nearby match's distance, checked to within 1 m
 
 
 BRITISH_COLUMBIA = Location("Canada", "CA", "British Columbia", "82249235B24619009834807")
@@ -59,6 +60,10 @@ GOLDEN = [
     ),
     # Chosen: 3.2 km inside the coast of Graham Island.
     Golden("Haida Gwaii, onshore", 53.5, -132.0, LookupStatus.MATCHED, BRITISH_COLUMBIA),
+    # Off Haida Gwaii, outside every Region and Country: 285.7 m from British Columbia.
+    Golden(
+        "Haida Gwaii, offshore", 53.25, -132.07, LookupStatus.NEARBY, BRITISH_COLUMBIA, distance_m=285.7,
+    ),
     Golden("Taveuni, east of 180", -16.896, 179.975, LookupStatus.MATCHED, NORTHERN_FIJI),
     Golden("Taveuni, west of -180", -16.818, -179.931, LookupStatus.MATCHED, NORTHERN_FIJI),
     # Chosen: on Taveuni, where CGAZ splits Northern at the antimeridian.
@@ -91,6 +96,14 @@ GOLDEN = [
     Golden("Vatican City", 41.9029, 12.4534, LookupStatus.COUNTRY_ONLY, Location("Vatican City", "VA")),
     # Chosen: inland Antarctica, another whole-country ADM1 feature.
     Golden("Antarctica", -82.0, 0.0, LookupStatus.COUNTRY_ONLY, Location("Antarctica", "AQ")),
+    # Near features that stand for a whole Country, a Nearby hit is country only, not nearby.
+    # The South Pole is in ADM0 Antarctica, 120 m from the whole-country ADM1 feature.
+    Golden("South Pole", -90.0, 0.0, LookupStatus.COUNTRY_ONLY, Location("Antarctica", "AQ")),
+    # Stanley lies outside every feature, 231.6 m from the Disputed area DIS007.
+    Golden(
+        "Stanley, Falkland Islands", -51.69, -57.86, LookupStatus.COUNTRY_ONLY,
+        Location("Falkland Islands (UK)", None),
+    ),
     # Open water: the nearest Region, British Columbia, is 15.4 km away, beyond any Nearby match.
     Golden("Strait of Georgia", 49.25, -123.6, LookupStatus.NO_MATCH),
     # Chosen: in the Kafia Kingi area, ADM1 South Darfur (Sudan) lies inside ADM0 South Sudan.
@@ -124,3 +137,7 @@ def test_golden(v6_index, golden):
     assert result.status is golden.status
     assert result.location == golden.location
     assert set(result.candidates) == golden.candidates
+    if golden.distance_m is None:
+        assert result.distance_m is None
+    else:
+        assert result.distance_m == pytest.approx(golden.distance_m, abs=1)
