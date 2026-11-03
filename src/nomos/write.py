@@ -4,6 +4,7 @@ ExifTool rewrites only the metadata; the image data is never re-encoded.
 """
 
 from collections import Counter
+from collections.abc import Callable
 from enum import StrEnum
 
 from nomos.exiftool import ExifTool
@@ -11,6 +12,7 @@ from nomos.location import Location, LookupStatus
 from nomos.report import Report
 
 WRITABLE_STATUSES = {LookupStatus.MATCHED}
+IIM_UTF8_MARKER = "\x1b%G"  # IPTC:CodedCharacterSet for UTF-8, as ExifTool reads it with -n
 
 
 class WriteOutcome(StrEnum):
@@ -44,10 +46,25 @@ def iptc_tags(location: Location) -> dict[str, str]:
     return tags
 
 
-def write_tags(report: Report, iptc: bool = False) -> Counter[WriteOutcome]:
+def marking_iim_utf8_would_garble(iim: dict) -> bool:
+    """Whether setting the UTF-8 marker would garble a photo's existing IPTC-IIM text.
+
+    Without the marker, IIM text is read as Latin-1 (or another legacy character set), so
+    any non-ASCII value would no longer decode once the marker says UTF-8.
+    """
+    if iim.get("IPTC:CodedCharacterSet") == IIM_UTF8_MARKER:
+        return False
+    values = [v for value in iim.values() for v in (value if isinstance(value, list) else [value])]
+    return any(isinstance(value, str) and not value.isascii() for value in values)
+
+
+def write_tags(
+    report: Report, iptc: bool = False, warn: Callable[[str], None] = lambda message: None
+) -> Counter[WriteOutcome]:
     """Write the report's Locations into its photos and count the Write outcomes.
 
-    With iptc, the legacy IPTC-IIM location fields are written too.
+    With iptc, the legacy IPTC-IIM location fields are written too, except into a photo whose
+    existing IIM text is not UTF-8: that photo gets its XMP fields only, and a warning.
     """
     outcomes: Counter[WriteOutcome] = Counter()
     with ExifTool() as exiftool:
@@ -56,10 +73,17 @@ def write_tags(report: Report, iptc: bool = False) -> Counter[WriteOutcome]:
             if record.result.status not in WRITABLE_STATUSES or location is None:
                 outcomes[WriteOutcome.SKIPPED_UNRESOLVED] += 1
                 continue
+            photo = report.photo_path(record)
             tags = location_tags(location)
             if iptc:
-                tags |= iptc_tags(location)
-            exiftool.write(report.photo_path(record), tags)
+                if marking_iim_utf8_would_garble(exiftool.read([photo], ["IPTC:all"]).get(photo, {})):
+                    warn(
+                        f"{record.path}: existing IPTC-IIM text is not UTF-8, so only the XMP fields "
+                        "were written (writing UTF-8 IIM would garble it)"
+                    )
+                else:
+                    tags |= iptc_tags(location)
+            exiftool.write(photo, tags)
             outcomes[WriteOutcome.WRITTEN] += 1
     return outcomes
 

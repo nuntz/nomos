@@ -54,6 +54,10 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _warn(message: str) -> None:
+    print(f"nomos: warning: {message}", file=sys.stderr)
+
+
 def _build_index(args: argparse.Namespace) -> int:
     manifest = Manifest.load()
     index_path = build_index(manifest)
@@ -72,7 +76,7 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _write_tags(args: argparse.Namespace) -> int:
-    outcomes = write_tags(Report.load(args.report), iptc=args.iptc)
+    outcomes = write_tags(Report.load(args.report), iptc=args.iptc, warn=_warn)
     print(write_summary(outcomes))
     return 0
 
