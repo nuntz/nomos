@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from conftest import exiftool, make_geotagged_jpeg, read_tags
 from nomos.exiftool import NOMOS_CONFIG
 
@@ -199,3 +201,64 @@ def test_write_tags_in_place_keeps_no_backups(nomos, tmp_path):
     assert read_tags(photo, "XMP-photoshop:State") == {"XMP-photoshop:State": "Auvergne-Rhône-Alpes"}
     assert sorted(path.name for path in library.iterdir()) == ["lyon.jpg"]
     assert "delete_original" not in result.stdout
+
+
+DESCRIPTIONS = ("IFD0:ImageDescription", "XMP-dc:Description", "IPTC:Caption-Abstract")
+
+
+def read_descriptions(photo: Path) -> dict:
+    # Without -n, so text is decoded as any reader would see it.
+    (data,) = json.loads(exiftool("-json", "-G1", *(f"-{tag}" for tag in DESCRIPTIONS), photo))
+    data.pop("SourceFile")
+    return data
+
+
+def test_write_tags_leaves_the_description_intact(nomos, tmp_path):
+    photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
+    exiftool(
+        "-overwrite_original",
+        "-EXIF:ImageDescription=Marché, quai Saint-Antoine",
+        "-XMP-dc:Description=Marché, quai Saint-Antoine",
+        "-IPTC:CodedCharacterSet=UTF8",
+        "-IPTC:Caption-Abstract=Marché, quai Saint-Antoine",
+        photo,
+    )
+    before = read_descriptions(photo)
+    assert len(before) == 3
+    report = resolve(nomos, tmp_path / "library")
+
+    result = nomos("write-tags", "--iptc", str(report))
+
+    assert "written lyon.jpg" in result.stdout.splitlines()
+    assert read_descriptions(photo) == before
+
+
+def library_state(library: Path) -> dict[Path, tuple[bytes, int]]:
+    """Every file in the library (backups included) with its content and modification time."""
+    return {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in library.rglob("*") if path.is_file()}
+
+
+@pytest.mark.parametrize(
+    "options",
+    [[], ["--overwrite"], ["--overwrite", "--iptc"], ["--in-place", "--overwrite"]],
+    ids=" ".join,
+)
+def test_a_second_run_on_the_same_report_changes_no_file(nomos, tmp_path, options):
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "lyon.jpg", *LYON)
+    make_geotagged_jpeg(library / "maseru.jpg", -25.0, 25.0)
+    make_geotagged_jpeg(library / "vatican.jpg", 41.5, 12.5)
+    make_geotagged_jpeg(library / "open-water.jpg", 55.0, -140.0)
+    report = resolve(nomos, library)
+    edit_report_record(  # Country-only, as #6 resolves it: no State, and an empty RegionID
+        report, "vatican.jpg", lookup_status="country_only", country="Vatican City", country_code="VA",
+        region=None, region_id=None, caption="Vatican City",
+    )
+    first = nomos("write-tags", *options, str(report))
+    assert "written 3" in first.stdout
+    state = library_state(library)
+
+    second = nomos("write-tags", *options, str(report))
+
+    assert "written 0, skipped_existing 3, skipped_unresolved 1" in second.stdout
+    assert library_state(library) == state
