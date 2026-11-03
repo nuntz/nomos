@@ -26,4 +26,8 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+# The golden suite needs the real Dataset release (about 760 MB); run it with `pytest -m golden`.
+addopts = "-ra -m 'not golden'"
+markers = [
+    "golden: runs against the real Dataset release (geoBoundaries CGAZ), not the fixture",
+]

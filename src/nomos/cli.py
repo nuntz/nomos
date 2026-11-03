@@ -13,10 +13,14 @@ from nomos.write import summary as write_summary
 from nomos.write import write_tags
 
 
+ATTRIBUTION = "Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0."
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nomos",
         description="Tag geotagged photos with the Region and Country they were taken in, offline.",
+        epilog=ATTRIBUTION,
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
@@ -61,7 +65,7 @@ def _warn(message: str) -> None:
 def _build_index(args: argparse.Namespace) -> int:
     manifest = Manifest.load()
     index_path = build_index(manifest)
-    print(f"Boundary index for Dataset release {manifest.release} written to {index_path}")
+    print(f"Boundary index for Dataset release {manifest.release}: {index_path}")
     return 0
 
 
