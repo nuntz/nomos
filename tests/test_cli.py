@@ -57,6 +57,42 @@ def test_build_index_refuses_a_download_whose_checksum_does_not_match(nomos, tmp
     assert "run `nomos build-index`" in resolved.stderr
 
 
+def serve_fixture_release(nomos, tmp_path: Path, name: str = "served-release") -> Path:
+    """Copy the fixture Dataset release to its own folder and point the manifest's URLs at it."""
+    served = tmp_path / name
+    shutil.copytree(FIXTURE_DATASET, served)
+    write_fixture_manifest(Path(nomos.env["NOMOS_MANIFEST"]), dataset_dir=served)
+    return served
+
+
+def test_build_index_reuses_a_verified_download_instead_of_downloading_again(nomos, tmp_path):
+    served = serve_fixture_release(nomos, tmp_path)
+    nomos("build-index")
+    shutil.rmtree(served)  # any download attempt would now fail
+
+    result = nomos("build-index")
+
+    assert "Downloading" not in result.stdout
+    assert "verified" in result.stdout
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+    nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    assert report["photos"][0]["region"] == "British Columbia"
+
+
+def test_build_index_downloads_again_when_the_cached_download_does_not_verify(nomos, tmp_path):
+    nomos("build-index")
+    cached = Path(nomos.env["XDG_CACHE_HOME"]) / "nomos" / "fixture-v1" / "fixtureCGAZ_ADM1.geojson"
+    cached.write_bytes(cached.read_bytes().replace(b"British Columbia", b"British Colombia"))
+
+    result = nomos("build-index")
+
+    assert "Downloading ADM1" in result.stdout
+    assert "Downloading ADM0" not in result.stdout
+    assert cached.read_bytes() == (FIXTURE_DATASET / "fixtureCGAZ_ADM1.geojson").read_bytes()
+
+
 def test_resolve_reports_the_location_of_each_photo_and_changes_no_photo(nomos, tmp_path):
     library = tmp_path / "library"
     bc = make_geotagged_jpeg(library / "DCIM" / "100CANON" / "bc.jpg", 55.5, -125.25)

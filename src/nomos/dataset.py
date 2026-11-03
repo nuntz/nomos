@@ -86,8 +86,13 @@ def build_index(manifest: Manifest, progress=print) -> Path:
     paths = {}
     for layer in LAYERS:
         entry = manifest.files[layer]
-        progress(f"Downloading {layer} from {entry.url}")
-        paths[layer] = _download_verified(layer, entry, folder / entry.filename)
+        dest = folder / entry.filename
+        if _verifies(entry, dest):
+            progress(f"{layer}: using the verified download at {dest}")
+            paths[layer] = dest
+        else:
+            progress(f"Downloading {layer} from {entry.url}")
+            paths[layer] = _download_verified(layer, entry, dest)
     progress(f"Building the boundary index for Dataset release {manifest.release}")
     index = BoundaryIndex.build(adm0=paths["ADM0"], adm1=paths["ADM1"])
     index_path = folder / INDEX_NAME
@@ -103,6 +108,20 @@ def load_index(manifest: Manifest) -> BoundaryIndex:
             f"no boundary index for Dataset release {manifest.release}; run `nomos build-index` first"
         )
     return BoundaryIndex.load(path)
+
+
+def _verifies(entry: DatasetFile, path: Path) -> bool:
+    """Whether path holds exactly the file the manifest pins: same byte size and SHA-256."""
+    try:
+        if path.stat().st_size != entry.bytes:
+            return False
+        digest = hashlib.sha256()
+        with open(path, "rb") as f:
+            while chunk := f.read(1 << 20):
+                digest.update(chunk)
+    except OSError:
+        return False
+    return digest.hexdigest() == entry.sha256
 
 
 def _download_verified(layer: str, entry: DatasetFile, dest: Path) -> Path:
