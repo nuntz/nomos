@@ -155,3 +155,27 @@ def test_write_tags_writes_the_location_of_matched_photos_into_standard_xmp_fiel
         "XMP-iptcCore:CountryCode": "LS",
     }
     assert {photo: image_data_hash(photo) for photo in (lyon, maseru)} == image_data
+
+
+NOMOS_TAGS = ("XMP-nomos:RegionID", "XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus")
+
+
+def test_write_tags_writes_the_nomos_namespace_into_each_written_photo(nomos, tmp_path):
+    library = tmp_path / "library"
+    lyon = make_geotagged_jpeg(library / "lyon.jpg", 44.75, 4.5)
+    maseru = make_geotagged_jpeg(library / "maseru.jpg", -25.0, 25.0)
+    nomos("build-index")
+    nomos("resolve", str(library))
+
+    nomos("write-tags", "nomos-report.json")
+
+    assert read_tags(lyon, *NOMOS_TAGS) == {
+        "XMP-nomos:RegionID": "fixture-FRA-ARA",
+        "XMP-nomos:DatasetRelease": "fixture-v1",
+        "XMP-nomos:LookupStatus": "matched",
+    }
+    assert read_tags(maseru, *NOMOS_TAGS) == {
+        "XMP-nomos:RegionID": "fixture-LSO-MAS",
+        "XMP-nomos:DatasetRelease": "fixture-v1",
+        "XMP-nomos:LookupStatus": "matched",
+    }
