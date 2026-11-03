@@ -1,5 +1,6 @@
 """Seam 2: the `nomos` CLI, end to end, with real ExifTool on generated JPEGs."""
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -21,6 +22,12 @@ def test_help_lists_the_three_commands(nomos):
 
     for command in ("build-index", "resolve", "write-tags"):
         assert command in result.stdout
+
+
+def test_help_credits_the_boundary_data(nomos):
+    result = nomos("--help")
+
+    assert "Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0" in " ".join(result.stdout.split())
 
 
 def test_exits_with_a_clear_error_when_exiftool_is_not_installed(nomos, tmp_path):
@@ -64,6 +71,109 @@ def test_build_index_refuses_a_download_whose_checksum_does_not_match(nomos, tmp
     resolved = nomos("resolve", str(library), check=False)
     assert resolved.returncode != 0
     assert "run `nomos build-index`" in resolved.stderr
+
+
+def serve_fixture_release(nomos, tmp_path: Path, name: str = "served-release") -> Path:
+    """Copy the fixture Dataset release to its own folder and point the manifest's URLs at it."""
+    served = tmp_path / name
+    shutil.copytree(FIXTURE_DATASET, served)
+    write_fixture_manifest(Path(nomos.env["NOMOS_MANIFEST"]), dataset_dir=served)
+    return served
+
+
+def test_build_index_reuses_a_verified_download_instead_of_downloading_again(nomos, tmp_path):
+    served = serve_fixture_release(nomos, tmp_path)
+    nomos("build-index")
+    shutil.rmtree(served)  # any download attempt would now fail
+
+    result = nomos("build-index")
+
+    assert "Downloading" not in result.stdout
+    assert "verified" in result.stdout
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+    nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    assert report["photos"][0]["region"] == "British Columbia"
+
+
+def test_build_index_downloads_again_when_the_cached_download_does_not_verify(nomos, tmp_path):
+    nomos("build-index")
+    cached = Path(nomos.env["XDG_CACHE_HOME"]) / "nomos" / "fixture-v1" / "fixtureCGAZ_ADM1.geojson"
+    cached.write_bytes(cached.read_bytes().replace(b"British Columbia", b"British Colombia"))
+
+    result = nomos("build-index")
+
+    assert "Downloading ADM1" in result.stdout
+    assert "Downloading ADM0" not in result.stdout
+    assert cached.read_bytes() == (FIXTURE_DATASET / "fixtureCGAZ_ADM1.geojson").read_bytes()
+
+
+def change_fixture_release(nomos, tmp_path: Path) -> Path:
+    """Point the manifest at a changed fixture release, under the same release name, in which
+    British Columbia is renamed. Returns the folder that serves it."""
+    changed = tmp_path / "changed-release"
+    shutil.copytree(FIXTURE_DATASET, changed)
+    adm1 = changed / "fixtureCGAZ_ADM1.geojson"
+    adm1.write_bytes(adm1.read_bytes().replace(b"British Columbia", b"Colombie-Britannique"))
+    manifest_path = Path(nomos.env["NOMOS_MANIFEST"])
+    write_fixture_manifest(manifest_path, dataset_dir=changed)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"]["ADM1"]["bytes"] = adm1.stat().st_size
+    manifest["files"]["ADM1"]["sha256"] = hashlib.sha256(adm1.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    return changed
+
+
+def resolved_region(nomos, tmp_path: Path, *resolve_args: str) -> str:
+    library = tmp_path / "library"
+    if not library.exists():
+        make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+    nomos("resolve", str(library), *resolve_args)
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    return report["photos"][0]["region"]
+
+
+def test_build_index_does_not_rebuild_an_index_that_is_up_to_date(nomos):
+    nomos("build-index")
+
+    result = nomos("build-index")
+
+    assert "Building" not in result.stdout
+    assert "up to date" in result.stdout
+
+
+def test_build_index_rebuilds_the_index_when_the_manifest_changes(nomos, tmp_path):
+    nomos("build-index")
+    assert resolved_region(nomos, tmp_path) == "British Columbia"
+    change_fixture_release(nomos, tmp_path)
+
+    nomos("build-index")
+
+    assert resolved_region(nomos, tmp_path) == "Colombie-Britannique"
+
+
+def test_resolve_never_uses_an_index_built_from_another_manifest(nomos, tmp_path):
+    nomos("build-index")
+    change_fixture_release(nomos, tmp_path)
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+
+    result = nomos("resolve", str(library), check=False)
+
+    assert result.returncode != 0
+    assert "run `nomos build-index`" in result.stderr
+    assert not (nomos.cwd / "nomos-report.json").exists()
+
+
+def test_resolve_rebuilds_a_stale_index_from_verified_downloads_without_downloading(nomos, tmp_path):
+    nomos("build-index")
+    changed = change_fixture_release(nomos, tmp_path)
+    release_dir = Path(nomos.env["XDG_CACHE_HOME"]) / "nomos" / "fixture-v1"
+    shutil.copy(changed / "fixtureCGAZ_ADM1.geojson", release_dir / "fixtureCGAZ_ADM1.geojson")
+    shutil.rmtree(changed)  # any download attempt would now fail
+
+    assert resolved_region(nomos, tmp_path) == "Colombie-Britannique"
 
 
 def test_resolve_reports_the_location_of_each_photo_and_changes_no_photo(nomos, tmp_path):
@@ -271,3 +381,82 @@ def test_write_tags_writes_no_nomos_namespace_into_photos_it_does_not_write(nomo
     assert "skipped_unresolved 2" in result.stdout
     for photo in (no_gps, open_water):
         assert read_tags(photo, "XMP-nomos:all") == {}
+
+
+def test_resolve_lists_the_candidates_of_ambiguous_photos_in_the_report(nomos, tmp_path):
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "border.jpg", 55.0, -120.0)  # on the British Columbia / Alberta edge
+    make_geotagged_jpeg(library / "kordofan.jpg", 9.75, 32.0)  # Sudan's Kordofan inside South Sudan
+    nomos("build-index")
+
+    result = nomos("resolve", str(library))
+
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    records = {record["path"]: record for record in report["photos"]}
+    assert records["border.jpg"]["lookup_status"] == "ambiguous"
+    assert "caption" not in records["border.jpg"]
+    assert sorted(records["border.jpg"]["candidates"], key=lambda c: c["caption"]) == [
+        {
+            "country_code": "CA",
+            "country": "Canada",
+            "region_id": "fixture-CAN-AB",
+            "region": "Alberta",
+            "caption": "Alberta, Canada",
+        },
+        {
+            "country_code": "CA",
+            "country": "Canada",
+            "region_id": "fixture-CAN-BC",
+            "region": "British Columbia",
+            "caption": "British Columbia, Canada",
+        },
+    ]
+    assert records["kordofan.jpg"]["lookup_status"] == "ambiguous"
+    assert sorted(records["kordofan.jpg"]["candidates"], key=lambda c: c["caption"]) == [
+        {
+            "country_code": "SD",
+            "country": "Sudan",
+            "region_id": "fixture-SDN-KOR",
+            "region": "Kordofan",
+            "caption": "Kordofan, Sudan",
+        },
+        {
+            "country_code": "SS",
+            "country": "South Sudan",
+            "region_id": None,
+            "region": None,
+            "caption": "South Sudan",
+        },
+    ]
+    assert "ambiguous 2" in result.stdout.splitlines()[-1]
+
+
+def test_write_tags_writes_nothing_to_ambiguous_no_match_or_invalid_input_photos(nomos, tmp_path):
+    library = tmp_path / "library"
+    photos = {
+        "border.jpg": make_geotagged_jpeg(library / "border.jpg", 55.0, -120.0),
+        "open-water.jpg": make_geotagged_jpeg(library / "open-water.jpg", 55.0, -140.0),
+        # ExifTool keeps an EXIF longitude beyond 180 as it is, as in corrupt metadata.
+        "corrupt.jpg": make_jpeg(
+            library / "corrupt.jpg",
+            "-EXIF:GPSLatitude=55", "-EXIF:GPSLatitudeRef=N",
+            "-EXIF:GPSLongitude=200", "-EXIF:GPSLongitudeRef=E",
+        ),
+    }
+    before = {name: photo.read_bytes() for name, photo in photos.items()}
+    nomos("build-index")
+    nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    records = {record["path"]: record for record in report["photos"]}
+    assert {path: record["lookup_status"] for path, record in records.items()} == {
+        "border.jpg": "ambiguous",
+        "open-water.jpg": "no_match",
+        "corrupt.jpg": "invalid_input",
+    }
+    assert "longitude" in records["corrupt.jpg"]["reason"]
+
+    result = nomos("write-tags", "nomos-report.json")
+
+    assert "written 0" in result.stdout
+    assert "skipped_unresolved 3" in result.stdout
+    assert {name: photo.read_bytes() for name, photo in photos.items()} == before

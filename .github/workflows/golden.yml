@@ -1,0 +1,55 @@
+name: golden
+
+# The golden suite runs against the real Dataset release (geoBoundaries CGAZ, about 760 MB), so it
+# does not run on every push: only on a schedule, when the data pin or the suite changes, and on
+# demand. The verified download is cached by release.
+on:
+  schedule:
+    - cron: "23 5 * * 1" # Mondays, 05:23 UTC
+  workflow_dispatch:
+  push:
+    paths:
+      - src/nomos/data/manifest.json
+      - tests/test_golden.py
+      - .github/workflows/golden.yml
+  pull_request:
+    paths:
+      - src/nomos/data/manifest.json
+      - tests/test_golden.py
+      - .github/workflows/golden.yml
+
+jobs:
+  golden-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install ExifTool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libimage-exiftool-perl
+          exiftool -ver
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install the project
+        run: uv sync --locked
+
+      - name: Locate the Nomos cache
+        id: dataset
+        run: |
+          echo "XDG_CACHE_HOME=$RUNNER_TEMP/xdg-cache" >> "$GITHUB_ENV"
+          echo "release=$(jq -r .release src/nomos/data/manifest.json)" >> "$GITHUB_OUTPUT"
+
+      # Keyed by release and manifest. A manifest change within the same release restores the
+      # previous files; build-index verifies them and downloads only what no longer matches.
+      - name: Cache the Dataset release download
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.XDG_CACHE_HOME }}/nomos/${{ steps.dataset.outputs.release }}/*.geojson
+          key: cgaz-${{ steps.dataset.outputs.release }}-${{ hashFiles('src/nomos/data/manifest.json') }}
+          restore-keys: cgaz-${{ steps.dataset.outputs.release }}-
+
+      - name: Run the golden suite
+        run: uv run pytest -m golden

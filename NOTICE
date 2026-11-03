@@ -1,0 +1,30 @@
+Nomos
+
+Nomos is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+
+Boundary data
+-------------
+
+Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0.
+
+Nomos resolves Locations against the geoBoundaries Comprehensive Global Administrative Zones
+(CGAZ) ADM0 and ADM1 layers, release v6.0.0, commit 1289e40e366c7b320550be1ee0614a9472d572d4 of
+https://github.com/wmgeolab/geoBoundaries. The data is not included in this repository or in the
+Nomos package; `nomos build-index` downloads it into the user's cache. Nomos uses it unmodified,
+apart from building a local lookup index from it.
+
+geoBoundaries is built by the community and the William & Mary geoLab, and is released under the
+Creative Commons Attribution 4.0 International licence (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+Citation:
+  Runfola, D. et al. (2020) geoBoundaries: A global database of political administrative
+  boundaries. PLoS ONE 15(4): e0231866. https://doi.org/10.1371/journal.pone.0231866
+
+Region and Country names, Region IDs and boundaries come from geoBoundaries. Disputed areas in
+CGAZ follow US Department of State definitions. Locations are for display and are not
+determinations of sovereignty.
+
+The fixture Dataset release in tests/fixtures/dataset/ is hand-drawn for testing and is not
+derived from geoBoundaries data.

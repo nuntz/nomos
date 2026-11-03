@@ -34,31 +34,41 @@ class PhotoRecord:
             "lookup_status": self.result.status.value,
         }
         if (location := self.result.location) is not None:
-            record |= {
-                "country_code": location.country_code,
-                "country": location.country,
-                "region_id": location.region_id,
-                "region": location.region,
-                "caption": location.caption,
-            }
+            record |= _location_to_json(location)
+        if self.result.candidates:
+            record["candidates"] = [_location_to_json(candidate) for candidate in self.result.candidates]
         if self.result.reason is not None:
             record["reason"] = self.result.reason
         return record
 
     @classmethod
     def from_json(cls, record: dict) -> "PhotoRecord":
-        location = None
-        if "country" in record:
-            location = Location(
-                country=record["country"],
-                country_code=record.get("country_code"),
-                region=record.get("region"),
-                region_id=record.get("region_id"),
-            )
         result = LookupResult(
-            status=LookupStatus(record["lookup_status"]), location=location, reason=record.get("reason")
+            status=LookupStatus(record["lookup_status"]),
+            location=_location_from_json(record) if "country" in record else None,
+            candidates=tuple(_location_from_json(candidate) for candidate in record.get("candidates", ())),
+            reason=record.get("reason"),
         )
         return cls(record["path"], record.get("latitude"), record.get("longitude"), result)
+
+
+def _location_to_json(location: Location) -> dict:
+    return {
+        "country_code": location.country_code,
+        "country": location.country,
+        "region_id": location.region_id,
+        "region": location.region,
+        "caption": location.caption,
+    }
+
+
+def _location_from_json(data: dict) -> Location:
+    return Location(
+        country=data["country"],
+        country_code=data.get("country_code"),
+        region=data.get("region"),
+        region_id=data.get("region_id"),
+    )
 
 
 @dataclass(frozen=True)
