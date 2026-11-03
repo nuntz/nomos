@@ -70,6 +70,26 @@ def test_point_on_an_edge_shared_by_two_regions_is_ambiguous_and_lists_both(inde
     assert set(result.candidates) == {BRITISH_COLUMBIA, ALBERTA}
 
 
+def test_region_whose_country_disagrees_with_the_containing_country_is_ambiguous_and_lists_both(index):
+    # Kordofan (Sudan) reaches into ADM0 South Sudan between lat 9.5 and 10.
+    result = index.lookup(9.75, 32.0)
+
+    assert result.status is LookupStatus.AMBIGUOUS
+    assert result.location is None
+    assert set(result.candidates) == {
+        Location("Sudan", "SD", "Kordofan", "fixture-SDN-KOR"),
+        Location("South Sudan", "SS"),
+    }
+
+
+def test_region_on_a_border_between_countries_is_matched_when_one_of_them_is_its_country(index):
+    # Lat 50 is the Canada / United States border in ADM0; only British Columbia reaches it in ADM1.
+    result = index.lookup(50.0, -125.0)
+
+    assert result.status is LookupStatus.MATCHED
+    assert result.location == BRITISH_COLUMBIA
+
+
 def rewrite_coordinates(source, dest, transform):
     """Copy a GeoJSON file, passing every (lon, lat) pair through transform."""
     data = json.loads(source.read_text(encoding="utf-8"))
