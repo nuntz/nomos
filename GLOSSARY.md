@@ -12,9 +12,17 @@ _Avoid_: nation, state (as a synonym for country)
 A first-level administrative subdivision (ADM1) of a Country as the boundary dataset defines it: a région in France, a province or territory in Canada, a state in the United States.
 _Avoid_: province, state, area, ADM2 units such as départements
 
+**Disputed area**:
+A territory the boundary dataset carves out as disputed rather than assigning to a Country, such as the Falkland Islands or the West Bank. It has a name but no country code.
+_Avoid_: territory, contested zone
+
 **Location**:
 The Region and Country a photo was taken in, together with the Country code. This is what Nomos writes into a photo.
 _Avoid_: place, address, geotag
+
+**Country-only Location**:
+A Location with a Country but no Region: the point is in a Country the dataset does not subdivide there, in a Country with no subdivisions at all, or in a Disputed area (which then stands in for the Country).
+_Avoid_: partial match
 
 **Region ID**:
 The boundary dataset's own identifier for a Region. It is what joins a tagged photo to that Region's shape on a map.
@@ -35,7 +43,7 @@ _Avoid_: caption (even though IPTC calls this field Caption-Abstract)
 ## Tagging
 
 **Lookup status**:
-The result of resolving one photo's coordinates to a Location: matched, nearby match, ambiguous, no match, no GPS, or invalid input.
+The result of resolving one photo's coordinates to a Location: matched, nearby match, country only, ambiguous, no match, no GPS, or invalid input.
 
 **Nearby match**:
 A Lookup status for a photo that falls just outside every Region, typically on a shoreline, pier or boat, and is assigned to the closest Region within a small tolerance.
