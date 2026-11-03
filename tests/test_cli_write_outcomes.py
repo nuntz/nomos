@@ -143,3 +143,33 @@ def test_overwrite_with_a_country_only_location_removes_the_stale_region(nomos, 
     }
     iim = read_tags(photo, "IPTC:Province-State", "IPTC:Country-PrimaryLocationName")
     assert iim == {"IPTC:Country-PrimaryLocationName": "France"}
+
+
+def test_photos_moved_or_regeotagged_after_resolve_are_skipped_stale(nomos, tmp_path):
+    library = tmp_path / "library"
+    moved = make_geotagged_jpeg(library / "moved.jpg", *LYON)
+    regeotagged = make_geotagged_jpeg(library / "regeotagged.jpg", *LYON)
+    unchanged = make_geotagged_jpeg(library / "unchanged.jpg", *LYON)
+    report = resolve(nomos, library)
+    moved.rename(library / "elsewhere.jpg")
+    exiftool("-overwrite_original", "-EXIF:GPSLatitude=55.5", "-EXIF:GPSLongitude=125.25", regeotagged)
+
+    result = nomos("write-tags", str(report))
+
+    lines = result.stdout.splitlines()
+    assert "skipped_stale moved.jpg" in lines
+    assert "skipped_stale regeotagged.jpg" in lines
+    assert "written unchanged.jpg" in lines
+    assert "3 photos: written 1, skipped_existing 0, skipped_unresolved 0, skipped_stale 2" in lines
+    assert "re-run `nomos resolve`" in result.stdout.lower()
+    assert read_tags(regeotagged, *XMP_LOCATION, "XMP-nomos:all") == {}
+    assert read_tags(library / "elsewhere.jpg", *XMP_LOCATION, "XMP-nomos:all") == {}
+
+
+def test_no_resolve_hint_when_no_photo_is_stale(nomos, tmp_path):
+    make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
+    report = resolve(nomos, tmp_path / "library")
+
+    result = nomos("write-tags", str(report))
+
+    assert "nomos resolve" not in result.stdout

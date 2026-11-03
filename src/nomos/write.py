@@ -3,14 +3,20 @@
 ExifTool rewrites only the metadata; the image data is never re-encoded.
 """
 
+import math
 from collections import Counter
 from collections.abc import Callable
 from enum import StrEnum
+from pathlib import Path
 
 from nomos.exiftool import ExifTool
 from nomos.location import Location, LookupStatus
+from nomos.photos import read_photo_gps
 from nomos.report import PhotoRecord, Report
 
+# How far a photo's re-read coordinates may be from the report's before it counts as changed:
+# about 1 cm, far below any real re-geotagging, but above float noise between two readings.
+STALE_TOLERANCE_DEGREES = 1e-7
 WRITABLE_STATUSES = {LookupStatus.MATCHED, LookupStatus.NEARBY, LookupStatus.COUNTRY_ONLY}
 IIM_UTF8_MARKER = "\x1b%G"  # IPTC:CodedCharacterSet for UTF-8, as ExifTool reads it with -n
 
@@ -108,6 +114,19 @@ def written_by_nomos(current: dict) -> bool:
     return any(_value(current, field) for field in ("XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus"))
 
 
+def is_stale(exiftool: ExifTool, photo: Path, record: PhotoRecord) -> bool:
+    """Whether a photo is missing, or its GPS coordinates changed since the report was made."""
+    if not photo.is_file():
+        return True
+    gps = read_photo_gps(exiftool, photo)
+    if gps.status is not None or record.latitude is None or record.longitude is None:
+        return True
+    return not (
+        math.isclose(gps.latitude, record.latitude, rel_tol=0, abs_tol=STALE_TOLERANCE_DEGREES)
+        and math.isclose(gps.longitude, record.longitude, rel_tol=0, abs_tol=STALE_TOLERANCE_DEGREES)
+    )
+
+
 def replacement(current: dict, tags: dict[str, str]) -> dict[str, str | None] | None:
     """The values that replace a Location Nomos wrote, or None when the photo already has them.
 
@@ -128,6 +147,9 @@ def write_tags(
     on_outcome: Callable[[PhotoRecord, WriteOutcome], None] = lambda record, outcome: None,
 ) -> Counter[WriteOutcome]:
     """Write the report's Locations into its photos and count the Write outcomes.
+
+    Each photo's GPS is re-read first: a photo that is missing, or whose coordinates changed
+    since the report was made, is skipped as stale.
 
     A photo that already has a Location is skipped, unless overwrite is set and the photo
     carries the Nomos namespace: then Nomos wrote that Location, and it is replaced.
@@ -158,6 +180,8 @@ def _write_photo(
     if record.result.status not in WRITABLE_STATUSES or location is None:
         return WriteOutcome.SKIPPED_UNRESOLVED
     photo = report.photo_path(record)
+    if is_stale(exiftool, photo, record):
+        return WriteOutcome.SKIPPED_STALE
     current = exiftool.read([photo], LOCATION_FIELDS + NOMOS_FIELDS).get(photo, {})
     replacing = has_location(current)
     if replacing and not (overwrite and written_by_nomos(current)):

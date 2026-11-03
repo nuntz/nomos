@@ -10,7 +10,7 @@ from nomos.exiftool import find_exiftool
 from nomos.report import DEFAULT_REPORT, Report
 from nomos.resolve import resolve_library
 from nomos.write import summary as write_summary
-from nomos.write import write_tags
+from nomos.write import WriteOutcome, write_tags
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -90,6 +90,12 @@ def _write_tags(args: argparse.Namespace) -> int:
         on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
     )
     print(write_summary(outcomes))
+    if stale := outcomes[WriteOutcome.SKIPPED_STALE]:
+        noun = "photo was" if stale == 1 else "photos were"
+        print(
+            f"{stale} {noun} missing or re-geotagged since the report was made. "
+            f"Re-run `nomos resolve` on the library and review the new report to tag them."
+        )
     return 0
 
 
