@@ -93,3 +93,26 @@ def test_southern_and_western_coordinates_are_read_with_the_right_sign(resolve, 
     assert records["north-west.jpg"]["region"] == "Washington"
     assert (records["south-west.jpg"]["latitude"], records["south-west.jpg"]["longitude"]) == (-51.5, -59.0)
     assert records["south-west.jpg"]["country"] == "Falkland Islands (UK)"
+
+
+def test_without_exif_gps_the_signed_xmp_gps_is_used(resolve, tmp_path):
+    library = tmp_path / "library"
+    make_jpeg(library / "xmp-only.jpg", "-XMP-exif:GPSLatitude=-25.0", "-XMP-exif:GPSLongitude=25.0")
+    make_jpeg(library / "xmp-west.jpg", "-XMP-exif:GPSLatitude=55.5", "-XMP-exif:GPSLongitude=-125.25")
+
+    records = resolve(library)
+
+    assert (records["xmp-only.jpg"]["latitude"], records["xmp-only.jpg"]["longitude"]) == (-25.0, 25.0)
+    assert records["xmp-only.jpg"]["region"] == "Maseru District"
+    assert (records["xmp-west.jpg"]["latitude"], records["xmp-west.jpg"]["longitude"]) == (55.5, -125.25)
+    assert records["xmp-west.jpg"]["region"] == "British Columbia"
+
+
+def test_exif_gps_takes_precedence_over_xmp_gps(resolve, tmp_path):
+    library = tmp_path / "library"
+    both = make_geotagged_jpeg(library / "both.jpg", 55.5, -125.25)
+    exiftool("-overwrite_original", "-XMP-exif:GPSLatitude=-25.0", "-XMP-exif:GPSLongitude=25.0", both)
+
+    records = resolve(library)
+
+    assert records["both.jpg"]["region"] == "British Columbia"
