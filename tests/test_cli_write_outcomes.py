@@ -1,6 +1,8 @@
 """Seam 2: `nomos write-tags` Write outcomes and overwrite policy, end to end with real ExifTool."""
 
 import json
+import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -216,6 +218,39 @@ def test_write_tags_leaves_the_description_intact(nomos, tmp_path):
 
     assert "written lyon.jpg" in result.stdout.splitlines()
     assert read_descriptions(photo) == before
+
+
+def log_exiftool_arguments(nomos, tmp_path: Path) -> Path:
+    """Put an `exiftool` first on Nomos's PATH that logs every argument Nomos sends it (on the
+    command line and, in stay-open mode, on stdin) before passing them to the real ExifTool."""
+    log, shim = tmp_path / "exiftool-arguments.log", tmp_path / "bin" / "exiftool"
+    shim.parent.mkdir()
+    shim.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{log}"\ntee -a "{log}" | exec "{shutil.which("exiftool")}" "$@"\n'
+    )
+    shim.chmod(0o755)
+    nomos.env["PATH"] = f"{shim.parent}{os.pathsep}{nomos.env['PATH']}"
+    return log
+
+
+def test_nomos_never_asks_exiftool_for_the_description(nomos, tmp_path):
+    library = tmp_path / "library"
+    photo = make_geotagged_jpeg(library / "lyon.jpg", *LYON)
+    exiftool("-overwrite_original", "-IPTC:Caption-Abstract=Café à Lyon", "-XMP-dc:Description=Café", photo)
+    tag_with_an_older_nomos_run(nomos, library, "lyon.jpg")
+    log = log_exiftool_arguments(nomos, tmp_path)
+    report = resolve(nomos, library)
+
+    nomos("write-tags", "--overwrite", "--iptc", str(report))
+
+    arguments = log.read_text(encoding="utf-8").splitlines()
+    assert any(argument.startswith("-XMP-photoshop:State") for argument in arguments)  # the log works
+    requested = [argument for argument in arguments if argument.startswith("-") and "=" not in argument]
+    assert [
+        argument
+        for argument in requested
+        if "description" in argument.lower() or "caption" in argument.lower() or argument.lower().endswith(":all")
+    ] == []
 
 
 def library_state(library: Path) -> dict[Path, tuple[bytes, int]]:

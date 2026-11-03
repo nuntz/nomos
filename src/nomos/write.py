@@ -80,16 +80,21 @@ def nomos_tags(record: PhotoRecord, dataset_release: str) -> dict[str, str]:
     }
 
 
-def marking_iim_utf8_would_garble(iim: dict) -> bool:
-    """Whether setting the UTF-8 marker would garble a photo's existing IPTC-IIM text.
+# What tells whether a photo has IPTC-IIM text, and in which character set, without reading
+# that text (it may hold the Description): the UTF-8 marker, and the digest ExifTool computes
+# over the IIM block when there is one.
+IIM_CHARSET_TAGS = ("IPTC:CodedCharacterSet", "File:CurrentIPTCDigest")
 
-    Without the marker, IIM text is read as Latin-1 (or another legacy character set), so
-    any non-ASCII value would no longer decode once the marker says UTF-8.
+
+def marking_iim_utf8_would_garble(current: dict) -> bool:
+    """Whether setting the UTF-8 marker might garble a photo's existing IPTC-IIM text.
+
+    Without the marker, IIM text is read as Latin-1 (or another legacy character set), so any
+    non-ASCII text, such as an accented Description, would no longer decode once the marker
+    says UTF-8. Nomos never reads the Description to find out, so any existing IIM block
+    without the marker counts.
     """
-    if iim.get("IPTC:CodedCharacterSet") == IIM_UTF8_MARKER:
-        return False
-    values = [v for value in iim.values() for v in (value if isinstance(value, list) else [value])]
-    return any(isinstance(value, str) and not value.isascii() for value in values)
+    return "File:CurrentIPTCDigest" in current and current.get("IPTC:CodedCharacterSet") != IIM_UTF8_MARKER
 
 
 def _current_text(current: dict, tag: str) -> str:
@@ -173,7 +178,7 @@ def write_tags(
     Each photo's Write outcome is passed to on_outcome as soon as it is known.
 
     With iptc, the legacy IPTC-IIM location fields are written too, except into a photo whose
-    existing IIM text is not UTF-8: that photo gets its XMP fields only, and a warning.
+    existing IIM is not marked as UTF-8: that photo gets its XMP fields only, and a warning.
     """
     outcomes: Counter[WriteOutcome] = Counter()
     with ExifTool() as exiftool:
@@ -191,12 +196,12 @@ def _write_photo(exiftool: ExifTool, report: Report, record: PhotoRecord, option
     photo = report.photo_path(record)
     if is_stale(exiftool, photo, record):
         return WriteOutcome.SKIPPED_STALE
-    current = exiftool.read([photo], LOCATION_TAGS + NOMOS_TAGS).get(photo, {})
+    current = exiftool.read([photo], LOCATION_TAGS + NOMOS_TAGS + IIM_CHARSET_TAGS).get(photo, {})
     replacing = has_location(current)
     if replacing and not (options.overwrite and written_by_nomos(current)):
         return WriteOutcome.SKIPPED_EXISTING
     tags: dict[str, str | None] = location_tags(location) | nomos_tags(record, report.dataset_release)
-    iim_would_garble = options.iptc and marking_iim_utf8_would_garble(exiftool.read([photo], ["IPTC:all"]).get(photo, {}))
+    iim_would_garble = options.iptc and marking_iim_utf8_would_garble(current)
     if options.iptc and not iim_would_garble:
         tags |= iptc_tags(location)
     if replacing:
@@ -206,7 +211,7 @@ def _write_photo(exiftool: ExifTool, report: Report, record: PhotoRecord, option
     exiftool.write(photo, tags, keep_backup=not options.in_place)
     if iim_would_garble:
         options.warn(
-            f"{record.path}: existing IPTC-IIM text is not UTF-8, so only the XMP fields "
-            "were written (writing UTF-8 IIM would garble it)"
+            f"{record.path}: the existing IPTC-IIM is not marked as UTF-8, so only the XMP fields "
+            "were written (marking it as UTF-8 could garble its text)"
         )
     return WriteOutcome.WRITTEN

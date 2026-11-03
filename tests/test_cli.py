@@ -296,11 +296,15 @@ def test_write_tags_with_iptc_also_writes_the_location_into_utf8_iptc_iim_fields
     assert read_tags(lyon, "XMP-photoshop:State")["XMP-photoshop:State"] == "Auvergne-Rhône-Alpes"
 
 
-def test_write_tags_with_iptc_leaves_existing_latin1_iim_alone_and_still_writes_xmp(nomos, tmp_path):
+@pytest.mark.parametrize("description", ["Café à Lyon", "Cafe in Lyon"], ids=["latin1", "ascii"])
+def test_write_tags_with_iptc_leaves_existing_iim_without_a_utf8_marker_alone_and_still_writes_xmp(
+    nomos, tmp_path, description
+):
     # Without a UTF-8 marker, ExifTool writes IIM text as Latin-1, as older software does. Setting
-    # the marker would make that Description read as invalid UTF-8, so Nomos skips the IIM part.
+    # the marker would make an accented Description read as invalid UTF-8, and Nomos never reads
+    # the Description to check, so it skips the IIM part whenever the marker is missing.
     lyon = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", 44.75, 4.5)
-    exiftool("-overwrite_original", "-IPTC:Caption-Abstract=Café à Lyon", lyon)
+    exiftool("-overwrite_original", f"-IPTC:Caption-Abstract={description}", lyon)
     iim_before = read_tags(lyon, "IPTC:all")
     nomos("build-index")
     nomos("resolve", str(tmp_path / "library"))
@@ -311,23 +315,14 @@ def test_write_tags_with_iptc_leaves_existing_latin1_iim_alone_and_still_writes_
     assert "IPTC-IIM" in result.stderr
     assert read_tags(lyon, "IPTC:all") == iim_before
     (iim,) = json.loads(exiftool("-json", "-G1", "-IPTC:all", lyon))
-    assert iim["IPTC:Caption-Abstract"] == "Café à Lyon"
+    assert iim["IPTC:Caption-Abstract"] == description
     assert read_tags(lyon, "XMP-photoshop:State")["XMP-photoshop:State"] == "Auvergne-Rhône-Alpes"
     assert "written 1" in result.stdout
 
 
-@pytest.mark.parametrize(
-    "existing_iim",
-    [
-        pytest.param(["-IPTC:Caption-Abstract=Cafe in Lyon"], id="ascii-without-marker"),
-        pytest.param(["-IPTC:CodedCharacterSet=UTF8", "-IPTC:Caption-Abstract=Café à Lyon"], id="utf8"),
-    ],
-)
-def test_write_tags_with_iptc_adds_to_existing_iim_that_the_utf8_marker_cannot_garble(
-    nomos, tmp_path, existing_iim
-):
+def test_write_tags_with_iptc_adds_to_existing_iim_marked_as_utf8(nomos, tmp_path):
     lyon = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", 44.75, 4.5)
-    exiftool("-overwrite_original", *existing_iim, lyon)
+    exiftool("-overwrite_original", "-IPTC:CodedCharacterSet=UTF8", "-IPTC:Caption-Abstract=Café à Lyon", lyon)
     (before,) = json.loads(exiftool("-json", "-G1", "-IPTC:Caption-Abstract", lyon))
     nomos("build-index")
     nomos("resolve", str(tmp_path / "library"))
