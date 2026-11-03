@@ -6,24 +6,31 @@ from pathlib import Path
 import pytest
 
 from conftest import exiftool, make_geotagged_jpeg, read_tags
-from nomos.exiftool import NOMOS_CONFIG
 
 LYON = (44.75, 4.5)  # Auvergne-Rhône-Alpes, France, in the fixture Dataset release
 XMP_LOCATION = ("XMP-photoshop:State", "XMP-photoshop:Country", "XMP-iptcCore:CountryCode")
 
 
-def tag_as_older_nomos_run(photo: Path, *location_args: str, release: str = "fixture-v0") -> None:
-    """Tag a photo as a Nomos run against an older Dataset release would have."""
-    exiftool(
-        "-config",  # must come first; it defines the Nomos namespace so ExifTool can write it
-        NOMOS_CONFIG,
-        "-overwrite_original",
-        *location_args,
-        "-XMP-nomos:RegionID=fixture-old-id",
-        f"-XMP-nomos:DatasetRelease={release}",
-        "-XMP-nomos:LookupStatus=matched",
-        photo,
-    )
+def edit_report(report: Path, path: str | None = None, **fields) -> None:
+    """Change a report as another Dataset release could have resolved it: the report's own fields,
+    or with path, that photo's record. None removes a field."""
+    data = json.loads(report.read_text(encoding="utf-8"))
+    (target,) = [data] if path is None else [record for record in data["photos"] if record["path"] == path]
+    target.update(fields)
+    for name in [name for name, value in target.items() if value is None]:
+        del target[name]
+    report.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def tag_with_an_older_nomos_run(nomos, library: Path, path: str, *options: str) -> None:
+    """Tag a photo through `nomos write-tags` as a run against an older Dataset release did, which
+    resolved it to the older Region Rhône-Alpes."""
+    older = nomos.cwd / "older-report.json"
+    nomos("build-index")
+    nomos("resolve", str(library), "--report", str(older))
+    edit_report(older, dataset_release="fixture-v0")
+    edit_report(older, path, region="Rhône-Alpes", region_id="fixture-old-id", caption="Rhône-Alpes, France")
+    nomos("write-tags", "--in-place", *options, str(older))
 
 
 def resolve(nomos, library: Path) -> Path:
@@ -58,9 +65,7 @@ def test_a_photo_with_a_location_in_iptc_iim_only_is_skipped_existing(nomos, tmp
 
 def test_overwrite_replaces_a_location_nomos_wrote_with_an_older_dataset_release(nomos, tmp_path):
     photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
-    tag_as_older_nomos_run(
-        photo, "-XMP-photoshop:State=Rhône-Alpes", "-XMP-photoshop:Country=France", "-XMP-iptcCore:CountryCode=FR"
-    )
+    tag_with_an_older_nomos_run(nomos, tmp_path / "library", "lyon.jpg")
     report = resolve(nomos, tmp_path / "library")
 
     result = nomos("write-tags", "--overwrite", str(report))
@@ -79,7 +84,7 @@ def test_overwrite_replaces_a_location_nomos_wrote_with_an_older_dataset_release
 
 def test_without_overwrite_a_location_nomos_wrote_earlier_is_kept(nomos, tmp_path):
     photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
-    tag_as_older_nomos_run(photo, "-XMP-photoshop:State=Rhône-Alpes", "-XMP-photoshop:Country=France")
+    tag_with_an_older_nomos_run(nomos, tmp_path / "library", "lyon.jpg")
     report = resolve(nomos, tmp_path / "library")
 
     result = nomos("write-tags", str(report))
@@ -105,31 +110,11 @@ def test_overwrite_keeps_a_location_entered_by_hand(nomos, tmp_path):
     }
 
 
-def edit_report_record(report: Path, path: str, **fields) -> None:
-    """Change one record of a report, as a later Dataset release could resolve it. None removes a field."""
-    data = json.loads(report.read_text(encoding="utf-8"))
-    (record,) = (record for record in data["photos"] if record["path"] == path)
-    record.update(fields)
-    for name in [name for name, value in record.items() if value is None]:
-        del record[name]
-    report.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-
-
 def test_overwrite_with_a_country_only_location_removes_the_stale_region(nomos, tmp_path):
     photo = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
-    tag_as_older_nomos_run(
-        photo,
-        "-XMP-photoshop:State=Rhône-Alpes",
-        "-XMP-photoshop:Country=France",
-        "-XMP-iptcCore:CountryCode=FR",
-        # An older run with --iptc also wrote the IIM fields.
-        "-IPTC:CodedCharacterSet=UTF8",
-        "-IPTC:Province-State=Rhône-Alpes",
-        "-IPTC:Country-PrimaryLocationName=France",
-        "-IPTC:Country-PrimaryLocationCode=FR",
-    )
+    tag_with_an_older_nomos_run(nomos, tmp_path / "library", "lyon.jpg", "--iptc")  # IIM fields too
     report = resolve(nomos, tmp_path / "library")
-    edit_report_record(
+    edit_report(
         report, "lyon.jpg", lookup_status="country_only", region=None, region_id=None, caption="France"
     )
 
