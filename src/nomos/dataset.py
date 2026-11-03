@@ -52,7 +52,16 @@ class Manifest:
             except OSError as error:
                 raise DatasetError(f"cannot read manifest {override} ({MANIFEST_ENV}): {error}")
         else:
-            text = resources.files("nomos").joinpath("data/manifest.json").read_text(encoding="utf-8")
+            return cls.packaged()
+        return cls._parse(text)
+
+    @classmethod
+    def packaged(cls) -> "Manifest":
+        """The manifest shipped in the package, ignoring NOMOS_MANIFEST."""
+        return cls._parse(resources.files("nomos").joinpath("data/manifest.json").read_text(encoding="utf-8"))
+
+    @classmethod
+    def _parse(cls, text: str) -> "Manifest":
         data = json.loads(text)
         return cls(
             release=data["release"],
