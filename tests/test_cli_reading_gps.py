@@ -135,11 +135,14 @@ def test_resolve_finds_jpegs_in_nested_subfolders_with_any_letter_case(resolve, 
     ]
 
 
-def test_resolve_skips_hidden_files_macos_resource_files_and_symlinks(resolve, tmp_path):
+def test_resolve_skips_hidden_files_hidden_folders_macos_resource_files_and_symlinks(resolve, tmp_path):
     library = tmp_path / "library"
     make_geotagged_jpeg(library / "DCIM" / "IMG_0001.JPG", 55.5, -125.25)
     make_geotagged_jpeg(library / "DCIM" / ".hidden.jpg", 55.5, -125.25)
+    # Hidden folders macOS leaves on SD cards: deleted photos and the Spotlight index.
     make_geotagged_jpeg(library / ".Trashes" / "501" / "deleted.jpg", 55.5, -125.25)
+    make_geotagged_jpeg(library / ".Spotlight-V100" / "Store-V2" / "preview.jpg", 55.5, -125.25)
+    make_geotagged_jpeg(library / "DCIM" / ".thumbnails" / "IMG_0001.JPG", 55.5, -125.25)
     (library / "DCIM" / "._IMG_0001.JPG").write_bytes(b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        ")
     outside = make_geotagged_jpeg(tmp_path / "outside" / "elsewhere.jpg", 55.5, -125.25)
     (library / "DCIM" / "link.jpg").symlink_to(outside)
