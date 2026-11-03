@@ -13,10 +13,14 @@ from nomos.write import summary as write_summary
 from nomos.write import write_tags
 
 
+ATTRIBUTION = "Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0."
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nomos",
         description="Tag geotagged photos with the Region and Country they were taken in, offline.",
+        epilog=ATTRIBUTION,
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 

@@ -15,6 +15,12 @@ def test_help_lists_the_three_commands(nomos):
         assert command in result.stdout
 
 
+def test_help_credits_the_boundary_data(nomos):
+    result = nomos("--help")
+
+    assert "Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0" in " ".join(result.stdout.split())
+
+
 def test_exits_with_a_clear_error_when_exiftool_is_not_installed(nomos, tmp_path):
     empty_bin = tmp_path / "empty-bin"
     empty_bin.mkdir()
