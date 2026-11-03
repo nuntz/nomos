@@ -1,0 +1,16 @@
+{
+  "release": "v6.0.0",
+  "commit": "1289e40e366c7b320550be1ee0614a9472d572d4",
+  "files": {
+    "ADM0": {
+      "url": "https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/1289e40e366c7b320550be1ee0614a9472d572d4/releaseData/CGAZ/geoBoundariesCGAZ_ADM0.geojson",
+      "bytes": 401198724,
+      "sha256": "5e97632703209f192d87724c3c02c3ed70eccec32ebddb605af9647002b65d67"
+    },
+    "ADM1": {
+      "url": "https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/1289e40e366c7b320550be1ee0614a9472d572d4/releaseData/CGAZ/geoBoundariesCGAZ_ADM1.geojson",
+      "bytes": 361574443,
+      "sha256": "f77bb14b78ccbebb48f9eeeffaba1a0b0c395d9d1cf503d1243b5ac4ccecee3f"
+    }
+  }
+}

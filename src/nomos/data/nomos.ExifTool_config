@@ -1,0 +1,21 @@
+# ExifTool config that defines the Nomos XMP namespace (ADR 0001).
+#
+# Nomos passes this file with -config, as the first argument, to every ExifTool process it
+# starts. Without it ExifTool can still read the XMP-nomos tags, but cannot write them.
+
+%Image::ExifTool::UserDefined = (
+    'Image::ExifTool::XMP::Main' => {
+        nomos => { SubDirectory => { TagTable => 'Image::ExifTool::UserDefined::nomos' } },
+    },
+);
+
+%Image::ExifTool::UserDefined::nomos = (
+    GROUPS    => { 0 => 'XMP', 1 => 'XMP-nomos', 2 => 'Location' },
+    NAMESPACE => { 'nomos' => 'https://github.com/nuntz/nomos/ns/xmp/1.0/' },
+    WRITABLE  => 'string',
+    RegionID       => { },  # the CGAZ shapeID; empty for a Country-only Location
+    DatasetRelease => { },  # for example v6.0.0
+    LookupStatus   => { },  # matched, nearby or country_only
+);
+
+1;  # end

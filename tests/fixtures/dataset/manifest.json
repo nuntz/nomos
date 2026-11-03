@@ -1,0 +1,16 @@
+{
+  "release": "fixture-v1",
+  "commit": "fixture",
+  "files": {
+    "ADM0": {
+      "url": "fixtureCGAZ_ADM0.geojson",
+      "bytes": 4228,
+      "sha256": "5d2c770b6d6073e830524f89228cf196e2c5f3cd55b5127614ca0d6f67803cd5"
+    },
+    "ADM1": {
+      "url": "fixtureCGAZ_ADM1.geojson",
+      "bytes": 4308,
+      "sha256": "eda660d8c6445b689cedb96f8ccef4710976f4e34d5b00f0d867c3938cc7af89"
+    }
+  }
+}
