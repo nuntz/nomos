@@ -52,8 +52,16 @@ def _gps_from_tags(tags: dict) -> GpsReading:
     if lat is None or lon is None or tags.get("EXIF:GPSStatus") == "V":  # "V": the fix is void
         return GpsReading(status=LookupStatus.NO_GPS)
     lat_ref, lon_ref = tags.get("EXIF:GPSLatitudeRef"), tags.get("EXIF:GPSLongitudeRef")
-    if lat_ref not in ("N", "S") or lon_ref not in ("E", "W"):
-        return GpsReading(status=LookupStatus.INVALID_INPUT, reason="GPS hemisphere reference missing")
+    missing = [
+        name
+        for name, ref, allowed in (("GPSLatitudeRef", lat_ref, "NS"), ("GPSLongitudeRef", lon_ref, "EW"))
+        if ref not in tuple(allowed)
+    ]
+    if missing:
+        return GpsReading(
+            status=LookupStatus.INVALID_INPUT,
+            reason=f"{' and '.join(missing)} missing, so the hemisphere is unknown",
+        )
     latitude = -float(lat) if lat_ref == "S" else float(lat)
     longitude = -float(lon) if lon_ref == "W" else float(lon)
     if latitude == 0 and longitude == 0:
