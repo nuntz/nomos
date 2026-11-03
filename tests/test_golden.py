@@ -72,6 +72,25 @@ GOLDEN = [
         "Pristina, Kosovo", 42.66, 21.17, LookupStatus.MATCHED,
         Location("Kosovo", None, "District of Prishtina", "2360587B5118871504069"),
     ),
+    # Country-only Locations. In ADM0 France, with no Region within 50 km; 1.3 km inside France.
+    Golden("Cayenne, French Guiana", 4.9372, -52.326, LookupStatus.COUNTRY_ONLY, Location("France", "FR")),
+    # Chosen: in US waters, 25.7 km inside ADM0 and 31.8 km from Michigan, beyond any Nearby match.
+    Golden(
+        "Mid-Lake Superior", 47.7, -87.5, LookupStatus.COUNTRY_ONLY, Location("United States", "US"),
+    ),
+    # Chosen: Longyearbyen, in ADM0 Norway with no Region within 50 km.
+    Golden("Svalbard", 78.22, 15.65, LookupStatus.COUNTRY_ONLY, Location("Norway", "NO")),
+    # Chosen: a Disputed area (DIS007, shapeType DISP), 8.6 km inside it. Stanley is not used: it
+    # lies 231 m outside every feature.
+    Golden(
+        "Falkland Islands", -51.8, -58.5, LookupStatus.COUNTRY_ONLY, Location("Falkland Islands (UK)", None),
+    ),
+    # Chosen: a Disputed area whose shapeGroup ESH is an ISO code. It still gets no country code.
+    Golden("Western Sahara", 24.0, -13.0, LookupStatus.COUNTRY_ONLY, Location("Western Sahara", None)),
+    # A whole-country ADM1 feature (shapeType ADM0), 276 m inside it.
+    Golden("Vatican City", 41.9029, 12.4534, LookupStatus.COUNTRY_ONLY, Location("Vatican City", "VA")),
+    # Chosen: inland Antarctica, another whole-country ADM1 feature.
+    Golden("Antarctica", -82.0, 0.0, LookupStatus.COUNTRY_ONLY, Location("Antarctica", "AQ")),
     # Open water: the nearest Region, British Columbia, is 15.4 km away, beyond any Nearby match.
     Golden("Strait of Georgia", 49.25, -123.6, LookupStatus.NO_MATCH),
     # Chosen: in the Kafia Kingi area, ADM1 South Darfur (Sudan) lies inside ADM0 South Sudan.

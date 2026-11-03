@@ -247,13 +247,9 @@ def test_a_second_run_on_the_same_report_changes_no_file(nomos, tmp_path, option
     library = tmp_path / "library"
     make_geotagged_jpeg(library / "lyon.jpg", *LYON)
     make_geotagged_jpeg(library / "maseru.jpg", -25.0, 25.0)
-    make_geotagged_jpeg(library / "vatican.jpg", 41.5, 12.5)
+    make_geotagged_jpeg(library / "vatican.jpg", 41.5, 12.5)  # Country-only: no State, an empty RegionID
     make_geotagged_jpeg(library / "open-water.jpg", 55.0, -140.0)
     report = resolve(nomos, library)
-    edit_report_record(  # Country-only, as #6 resolves it: no State, and an empty RegionID
-        report, "vatican.jpg", lookup_status="country_only", country="Vatican City", country_code="VA",
-        region=None, region_id=None, caption="Vatican City",
-    )
     first = nomos("write-tags", *options, str(report))
     assert "written 3" in first.stdout
     state = library_state(library)
