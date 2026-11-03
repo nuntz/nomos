@@ -155,3 +155,23 @@ def test_write_tags_writes_the_location_of_matched_photos_into_standard_xmp_fiel
         "XMP-iptcCore:CountryCode": "LS",
     }
     assert {photo: image_data_hash(photo) for photo in (lyon, maseru)} == image_data
+    # Without --iptc, no legacy IPTC-IIM fields are written.
+    assert read_tags(lyon, "IPTC:all") == {}
+    assert read_tags(maseru, "IPTC:all") == {}
+
+
+def test_write_tags_with_iptc_also_writes_the_location_into_utf8_iptc_iim_fields(nomos, tmp_path):
+    lyon = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", 44.75, 4.5)
+    nomos("build-index")
+    nomos("resolve", str(tmp_path / "library"))
+
+    nomos("write-tags", "--iptc", str(nomos.cwd / "nomos-report.json"))
+
+    # Read back without -n, so ExifTool decodes IIM by its coded character set as any reader would.
+    (iim,) = json.loads(exiftool("-json", "-G1", "-IPTC:all", lyon))
+    assert iim["IPTC:CodedCharacterSet"] == "UTF8"
+    assert iim["IPTC:Province-State"] == "Auvergne-Rhône-Alpes"
+    assert iim["IPTC:Country-PrimaryLocationName"] == "France"
+    # IIM stores the code in a fixed 3 octets, so ExifTool pads "FR" with a space.
+    assert iim["IPTC:Country-PrimaryLocationCode"].rstrip() == "FR"
+    assert read_tags(lyon, "XMP-photoshop:State")["XMP-photoshop:State"] == "Auvergne-Rhône-Alpes"

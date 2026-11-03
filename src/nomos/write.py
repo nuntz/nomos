@@ -33,8 +33,22 @@ def location_tags(location: Location) -> dict[str, str]:
     return tags
 
 
-def write_tags(report: Report) -> Counter[WriteOutcome]:
-    """Write the report's Locations into its photos and count the Write outcomes."""
+def iptc_tags(location: Location) -> dict[str, str]:
+    """The legacy IPTC-IIM location fields for a Location, marked as UTF-8 so accents survive."""
+    tags = {"IPTC:CodedCharacterSet": "UTF8"}
+    if location.region:
+        tags["IPTC:Province-State"] = location.region
+    tags["IPTC:Country-PrimaryLocationName"] = location.country
+    if location.country_code:
+        tags["IPTC:Country-PrimaryLocationCode"] = location.country_code
+    return tags
+
+
+def write_tags(report: Report, iptc: bool = False) -> Counter[WriteOutcome]:
+    """Write the report's Locations into its photos and count the Write outcomes.
+
+    With iptc, the legacy IPTC-IIM location fields are written too.
+    """
     outcomes: Counter[WriteOutcome] = Counter()
     with ExifTool() as exiftool:
         for record in report.photos:
@@ -42,7 +56,10 @@ def write_tags(report: Report) -> Counter[WriteOutcome]:
             if record.result.status not in WRITABLE_STATUSES or location is None:
                 outcomes[WriteOutcome.SKIPPED_UNRESOLVED] += 1
                 continue
-            exiftool.write(report.photo_path(record), location_tags(location))
+            tags = location_tags(location)
+            if iptc:
+                tags |= iptc_tags(location)
+            exiftool.write(report.photo_path(record), tags)
             outcomes[WriteOutcome.WRITTEN] += 1
     return outcomes
 
