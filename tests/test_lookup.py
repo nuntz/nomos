@@ -265,3 +265,12 @@ def test_point_in_a_disputed_area_is_a_country_only_location_under_its_dataset_n
     assert result.status is LookupStatus.COUNTRY_ONLY
     assert result.location == Location("Falkland Islands (UK)", None)
     assert result.location.caption == "Falkland Islands (UK)"
+
+
+def test_point_on_a_border_between_countries_in_no_region_is_ambiguous_between_the_countries(index):
+    # On lon -54, the edge France's second square shares with Suriname; neither has a Region there.
+    result = index.lookup(4.0, -54.0)
+
+    assert result.status is LookupStatus.AMBIGUOUS
+    assert result.location is None
+    assert set(result.candidates) == {Location("France", "FR"), Location("Suriname", "SR")}

@@ -19,6 +19,8 @@ ADM0 (Countries)
   Russia        RUS  [-180, -175] x [65, 70]    (nothing east of 180 at these latitudes)
   Uganda        UGA  [34, 36] x [-1, 1]
   Kenya         KEN  [36, 38] x [-1, 1]         shares lon 36 with Uganda
+  Suriname      SUR  [-56, -54] x [3, 5]        shares lon -54 with France's second square
+                                                (no ADM1 there either)
 
 ADM1 (Regions)
   British Columbia     CAN  [-130, -120] x [50, 60]   shares lon -120 with Alberta
