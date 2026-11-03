@@ -4,8 +4,8 @@
   "files": {
     "ADM0": {
       "url": "fixtureCGAZ_ADM0.geojson",
-      "bytes": 3958,
-      "sha256": "323a33e80b9575da0dad81fcecdfeeb7268fab35b8f6ec379d55fc023b784662"
+      "bytes": 4228,
+      "sha256": "5d2c770b6d6073e830524f89228cf196e2c5f3cd55b5127614ca0d6f67803cd5"
     },
     "ADM1": {
       "url": "fixtureCGAZ_ADM1.geojson",

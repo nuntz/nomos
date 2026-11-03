@@ -274,3 +274,11 @@ def test_point_on_a_border_between_countries_in_no_region_is_ambiguous_between_t
     assert result.status is LookupStatus.AMBIGUOUS
     assert result.location is None
     assert set(result.candidates) == {Location("France", "FR"), Location("Suriname", "SR")}
+
+
+def test_a_regions_country_is_named_by_its_country_not_by_a_disputed_area_sharing_its_shape_group(index):
+    # ADM0 also has a Disputed area with shapeGroup CAN, listed after Canada.
+    result = index.lookup(55.0, -115.0)
+
+    assert result.status is LookupStatus.MATCHED
+    assert result.location == ALBERTA

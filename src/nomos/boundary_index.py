@@ -130,8 +130,11 @@ class BoundaryIndex:
     def __init__(self, countries: _Layer, regions: _Layer):
         self._countries = countries  # ADM0
         self._regions = regions  # ADM1
-        # ADM1 has no Country name field, so a Region's Country is named by its ADM0 unit.
-        self._country_names = {unit.shape_group: unit.name for unit in countries.units}
+        # ADM1 has no Country name field, so a Region's Country is named by its ADM0 unit. A
+        # Disputed area may share a Country's shapeGroup; the Country's own unit names it.
+        self._country_names: dict[str, str] = {}
+        for unit in sorted(countries.units, key=lambda unit: unit.shape_type == "DISP"):
+            self._country_names.setdefault(unit.shape_group, unit.name)
 
     @classmethod
     def build(cls, adm0: Path, adm1: Path) -> "BoundaryIndex":
