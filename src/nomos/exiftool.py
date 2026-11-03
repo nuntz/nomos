@@ -4,9 +4,14 @@ import json
 import shutil
 import subprocess
 from collections.abc import Iterable, Sequence
+from importlib import resources
 from pathlib import Path
 
 from nomos.errors import NomosError
+
+
+# Defines the Nomos XMP namespace (ADR 0001), so that XMP-nomos tags can be written.
+NOMOS_CONFIG = Path(str(resources.files("nomos").joinpath("data/nomos.ExifTool_config")))
 
 
 class ExifToolNotFound(NomosError):
@@ -32,6 +37,7 @@ class ExifTool:
     """A running ExifTool process. Use as a context manager.
 
     Each command is sent as an argument list over stdin, so no process is started per photo.
+    The process loads the Nomos namespace config, so every command can write XMP-nomos tags.
     """
 
     def __init__(self) -> None:
@@ -41,7 +47,8 @@ class ExifTool:
 
     def __enter__(self) -> "ExifTool":
         self._process = subprocess.Popen(
-            [self._executable, "-stay_open", "True", "-@", "-"],
+            # -config is only honoured as the very first argument.
+            [self._executable, "-config", NOMOS_CONFIG, "-stay_open", "True", "-@", "-"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

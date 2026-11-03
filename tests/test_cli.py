@@ -5,7 +5,16 @@ import json
 import shutil
 from pathlib import Path
 
-from conftest import FIXTURE_DATASET, exiftool, make_geotagged_jpeg, read_tags, write_fixture_manifest
+import pytest
+
+from conftest import (
+    FIXTURE_DATASET,
+    exiftool,
+    make_geotagged_jpeg,
+    make_jpeg,
+    read_tags,
+    write_fixture_manifest,
+)
 
 
 def test_help_lists_the_three_commands(nomos):
@@ -265,3 +274,110 @@ def test_write_tags_writes_the_location_of_matched_photos_into_standard_xmp_fiel
         "XMP-iptcCore:CountryCode": "LS",
     }
     assert {photo: image_data_hash(photo) for photo in (lyon, maseru)} == image_data
+    # Without --iptc, no legacy IPTC-IIM fields are written.
+    assert read_tags(lyon, "IPTC:all") == {}
+    assert read_tags(maseru, "IPTC:all") == {}
+
+
+def test_write_tags_with_iptc_also_writes_the_location_into_utf8_iptc_iim_fields(nomos, tmp_path):
+    lyon = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", 44.75, 4.5)
+    nomos("build-index")
+    nomos("resolve", str(tmp_path / "library"))
+
+    nomos("write-tags", "--iptc", str(nomos.cwd / "nomos-report.json"))
+
+    # Read back without -n, so ExifTool decodes IIM by its coded character set as any reader would.
+    (iim,) = json.loads(exiftool("-json", "-G1", "-IPTC:all", lyon))
+    assert iim["IPTC:CodedCharacterSet"] == "UTF8"
+    assert iim["IPTC:Province-State"] == "Auvergne-Rhône-Alpes"
+    assert iim["IPTC:Country-PrimaryLocationName"] == "France"
+    # IIM stores the code in a fixed 3 octets, so ExifTool pads "FR" with a space.
+    assert iim["IPTC:Country-PrimaryLocationCode"].rstrip() == "FR"
+    assert read_tags(lyon, "XMP-photoshop:State")["XMP-photoshop:State"] == "Auvergne-Rhône-Alpes"
+
+
+def test_write_tags_with_iptc_leaves_existing_latin1_iim_alone_and_still_writes_xmp(nomos, tmp_path):
+    # Without a UTF-8 marker, ExifTool writes IIM text as Latin-1, as older software does. Setting
+    # the marker would make that Description read as invalid UTF-8, so Nomos skips the IIM part.
+    lyon = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", 44.75, 4.5)
+    exiftool("-overwrite_original", "-IPTC:Caption-Abstract=Café à Lyon", lyon)
+    iim_before = read_tags(lyon, "IPTC:all")
+    nomos("build-index")
+    nomos("resolve", str(tmp_path / "library"))
+
+    result = nomos("write-tags", "--iptc", str(nomos.cwd / "nomos-report.json"))
+
+    assert "lyon.jpg" in result.stderr
+    assert "IPTC-IIM" in result.stderr
+    assert read_tags(lyon, "IPTC:all") == iim_before
+    (iim,) = json.loads(exiftool("-json", "-G1", "-IPTC:all", lyon))
+    assert iim["IPTC:Caption-Abstract"] == "Café à Lyon"
+    assert read_tags(lyon, "XMP-photoshop:State")["XMP-photoshop:State"] == "Auvergne-Rhône-Alpes"
+    assert "written 1" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "existing_iim",
+    [
+        pytest.param(["-IPTC:Caption-Abstract=Cafe in Lyon"], id="ascii-without-marker"),
+        pytest.param(["-IPTC:CodedCharacterSet=UTF8", "-IPTC:Caption-Abstract=Café à Lyon"], id="utf8"),
+    ],
+)
+def test_write_tags_with_iptc_adds_to_existing_iim_that_the_utf8_marker_cannot_garble(
+    nomos, tmp_path, existing_iim
+):
+    lyon = make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", 44.75, 4.5)
+    exiftool("-overwrite_original", *existing_iim, lyon)
+    (before,) = json.loads(exiftool("-json", "-G1", "-IPTC:Caption-Abstract", lyon))
+    nomos("build-index")
+    nomos("resolve", str(tmp_path / "library"))
+
+    result = nomos("write-tags", "--iptc", str(nomos.cwd / "nomos-report.json"))
+
+    assert "warning" not in result.stderr
+    (iim,) = json.loads(exiftool("-json", "-G1", "-IPTC:all", lyon))
+    assert iim["IPTC:Province-State"] == "Auvergne-Rhône-Alpes"
+    assert iim["IPTC:Caption-Abstract"] == before["IPTC:Caption-Abstract"]
+
+
+NOMOS_TAGS = ("XMP-nomos:RegionID", "XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus")
+
+
+def test_write_tags_writes_the_nomos_namespace_into_each_written_photo(nomos, tmp_path):
+    library = tmp_path / "library"
+    lyon = make_geotagged_jpeg(library / "lyon.jpg", 44.75, 4.5)
+    maseru = make_geotagged_jpeg(library / "maseru.jpg", -25.0, 25.0)
+    nomos("build-index")
+    nomos("resolve", str(library))
+
+    nomos("write-tags", "nomos-report.json")
+
+    assert read_tags(lyon, *NOMOS_TAGS) == {
+        "XMP-nomos:RegionID": "fixture-FRA-ARA",
+        "XMP-nomos:DatasetRelease": "fixture-v1",
+        "XMP-nomos:LookupStatus": "matched",
+    }
+    assert read_tags(maseru, *NOMOS_TAGS) == {
+        "XMP-nomos:RegionID": "fixture-LSO-MAS",
+        "XMP-nomos:DatasetRelease": "fixture-v1",
+        "XMP-nomos:LookupStatus": "matched",
+    }
+
+
+def test_write_tags_writes_no_nomos_namespace_into_photos_it_does_not_write(nomos, tmp_path):
+    library = tmp_path / "library"
+    no_gps = make_jpeg(library / "no-gps.jpg")
+    open_water = make_geotagged_jpeg(library / "open-water.jpg", 55.0, -140.0)
+    nomos("build-index")
+    nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    assert {record["path"]: record["lookup_status"] for record in report["photos"]} == {
+        "no-gps.jpg": "no_gps",
+        "open-water.jpg": "no_match",
+    }
+
+    result = nomos("write-tags", "nomos-report.json")
+
+    assert "skipped_unresolved 2" in result.stdout
+    for photo in (no_gps, open_water):
+        assert read_tags(photo, "XMP-nomos:all") == {}
