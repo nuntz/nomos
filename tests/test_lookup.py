@@ -90,6 +90,15 @@ def test_region_on_a_border_between_countries_is_matched_when_one_of_them_is_its
     assert result.location == BRITISH_COLUMBIA
 
 
+def test_point_outside_every_region_and_every_country_is_no_match(index):
+    # Open sea, 10 degrees west of British Columbia and far beyond any Nearby match tolerance.
+    result = index.lookup(55.0, -140.0)
+
+    assert result.status is LookupStatus.NO_MATCH
+    assert result.location is None
+    assert result.candidates == ()
+
+
 def rewrite_coordinates(source, dest, transform):
     """Copy a GeoJSON file, passing every (lon, lat) pair through transform."""
     data = json.loads(source.read_text(encoding="utf-8"))
