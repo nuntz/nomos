@@ -51,6 +51,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also write the legacy IPTC-IIM location fields, in UTF-8, for older software",
     )
+    write_tags.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace Locations that Nomos wrote earlier (for example from an older Dataset release); "
+        "Locations from any other source are never replaced",
+    )
     return parser
 
 
@@ -79,6 +85,7 @@ def _write_tags(args: argparse.Namespace) -> int:
     outcomes = write_tags(
         Report.load(args.report),
         iptc=args.iptc,
+        overwrite=args.overwrite,
         warn=_warn,
         on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
     )

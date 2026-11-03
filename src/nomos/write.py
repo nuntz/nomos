@@ -11,7 +11,7 @@ from nomos.exiftool import ExifTool
 from nomos.location import Location, LookupStatus
 from nomos.report import PhotoRecord, Report
 
-WRITABLE_STATUSES = {LookupStatus.MATCHED}
+WRITABLE_STATUSES = {LookupStatus.MATCHED, LookupStatus.NEARBY, LookupStatus.COUNTRY_ONLY}
 IIM_UTF8_MARKER = "\x1b%G"  # IPTC:CodedCharacterSet for UTF-8, as ExifTool reads it with -n
 
 
@@ -49,7 +49,7 @@ def iptc_tags(location: Location) -> dict[str, str]:
 def nomos_tags(record: PhotoRecord, dataset_release: str) -> dict[str, str]:
     """The Nomos XMP namespace fields (ADR 0001): how this photo's Location was found."""
     return {
-        "XMP-nomos:RegionID": record.result.location.region_id,
+        "XMP-nomos:RegionID": record.result.location.region_id or "",  # empty for a Country-only Location
         "XMP-nomos:DatasetRelease": dataset_release,
         "XMP-nomos:LookupStatus": record.result.status.value,
     }
@@ -67,9 +67,19 @@ def marking_iim_utf8_would_garble(iim: dict) -> bool:
     return any(isinstance(value, str) and not value.isascii() for value in values)
 
 
-# The fields that make up an existing Location, in XMP and IPTC-IIM, as ExifTool's -G keys them.
-_EXISTING_LOCATION_FIELDS = ("XMP:State", "XMP:Country", "IPTC:Province-State", "IPTC:Country-PrimaryLocationName")
-_EXISTING_LOCATION_TAGS = (
+# Every location field Nomos may write, in XMP and IPTC-IIM. When Nomos replaces a Location it
+# wrote, each of these that the new Location leaves out is removed, so no stale Region survives.
+LOCATION_FIELDS = (
+    "XMP-photoshop:State",
+    "XMP-photoshop:Country",
+    "XMP-iptcCore:CountryCode",
+    "IPTC:Province-State",
+    "IPTC:Country-PrimaryLocationName",
+    "IPTC:Country-PrimaryLocationCode",
+)
+NOMOS_FIELDS = ("XMP-nomos:RegionID", "XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus")
+# A non-empty one of these means the photo already has a Location.
+_EXISTING_LOCATION_FIELDS = (
     "XMP-photoshop:State",
     "XMP-photoshop:Country",
     "IPTC:Province-State",
@@ -77,23 +87,50 @@ _EXISTING_LOCATION_TAGS = (
 )
 
 
-def _text(value) -> str:
-    """A tag value as stripped text; ExifTool reads numeric-looking text as a number."""
+def _value(current: dict, field: str) -> str:
+    """A field's current value as stripped text ("" when absent).
+
+    ExifTool's -G keys a read by family-0 group (XMP-photoshop:State reads as XMP:State), and
+    reads numeric-looking text as a number. IIM pads the country code to 3 bytes ("FR ").
+    """
+    group, name = field.split(":")
+    value = current.get(f"{group.split('-')[0]}:{name}")
     return "" if value is None else str(value).strip()
 
 
 def has_location(current: dict) -> bool:
     """Whether a photo already has a Location: a non-empty State or Country in XMP or IPTC-IIM."""
-    return any(_text(current.get(field)) for field in _EXISTING_LOCATION_FIELDS)
+    return any(_value(current, field) for field in _EXISTING_LOCATION_FIELDS)
+
+
+def written_by_nomos(current: dict) -> bool:
+    """Whether a photo carries the Nomos namespace (ADR 0001). RegionID alone may be empty."""
+    return any(_value(current, field) for field in ("XMP-nomos:DatasetRelease", "XMP-nomos:LookupStatus"))
+
+
+def replacement(current: dict, tags: dict[str, str]) -> dict[str, str | None] | None:
+    """The values that replace a Location Nomos wrote, or None when the photo already has them.
+
+    Location fields the new values leave out are removed (None), such as the State of a
+    Region-level Location replaced by a Country-only one. ExifTool rewrites a photo even when
+    nothing changes, so skipping identical values is what keeps --overwrite idempotent.
+    """
+    if all(_value(current, field) == (tags.get(field) or "") for field in LOCATION_FIELDS + NOMOS_FIELDS):
+        return None
+    return {field: None for field in LOCATION_FIELDS} | tags
 
 
 def write_tags(
     report: Report,
     iptc: bool = False,
+    overwrite: bool = False,
     warn: Callable[[str], None] = lambda message: None,
     on_outcome: Callable[[PhotoRecord, WriteOutcome], None] = lambda record, outcome: None,
 ) -> Counter[WriteOutcome]:
     """Write the report's Locations into its photos and count the Write outcomes.
+
+    A photo that already has a Location is skipped, unless overwrite is set and the photo
+    carries the Nomos namespace: then Nomos wrote that Location, and it is replaced.
 
     Each photo's Write outcome is passed to on_outcome as soon as it is known.
 
@@ -103,23 +140,29 @@ def write_tags(
     outcomes: Counter[WriteOutcome] = Counter()
     with ExifTool() as exiftool:
         for record in report.photos:
-            outcome = _write_photo(exiftool, report, record, iptc, warn)
+            outcome = _write_photo(exiftool, report, record, iptc, overwrite, warn)
             outcomes[outcome] += 1
             on_outcome(record, outcome)
     return outcomes
 
 
 def _write_photo(
-    exiftool: ExifTool, report: Report, record: PhotoRecord, iptc: bool, warn: Callable[[str], None]
+    exiftool: ExifTool,
+    report: Report,
+    record: PhotoRecord,
+    iptc: bool,
+    overwrite: bool,
+    warn: Callable[[str], None],
 ) -> WriteOutcome:
     location = record.result.location
     if record.result.status not in WRITABLE_STATUSES or location is None:
         return WriteOutcome.SKIPPED_UNRESOLVED
     photo = report.photo_path(record)
-    current = exiftool.read([photo], _EXISTING_LOCATION_TAGS).get(photo, {})
-    if has_location(current):
+    current = exiftool.read([photo], LOCATION_FIELDS + NOMOS_FIELDS).get(photo, {})
+    replacing = has_location(current)
+    if replacing and not (overwrite and written_by_nomos(current)):
         return WriteOutcome.SKIPPED_EXISTING
-    tags = location_tags(location) | nomos_tags(record, report.dataset_release)
+    tags: dict[str, str | None] = location_tags(location) | nomos_tags(record, report.dataset_release)
     if iptc:
         if marking_iim_utf8_would_garble(exiftool.read([photo], ["IPTC:all"]).get(photo, {})):
             warn(
@@ -128,6 +171,10 @@ def _write_photo(
             )
         else:
             tags |= iptc_tags(location)
+    if replacing:
+        tags = replacement(current, tags)
+        if tags is None:
+            return WriteOutcome.SKIPPED_EXISTING
     exiftool.write(photo, tags)
     return WriteOutcome.WRITTEN
 

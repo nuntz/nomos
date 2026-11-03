@@ -3,7 +3,7 @@
 import json
 import shutil
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from importlib import resources
 from pathlib import Path
 
@@ -92,9 +92,12 @@ class ExifTool:
         records = json.loads(stdout) if stdout.strip() else []
         return {by_name[record.pop("SourceFile")]: record for record in records}
 
-    def write(self, photo: Path, values: dict[str, str]) -> None:
-        """Write tag values into a photo. Fails unless ExifTool reports the photo updated or unchanged."""
-        stdout, stderr = self.execute(*(f"-{tag}={value}" for tag, value in values.items()), photo)
+    def write(self, photo: Path, values: Mapping[str, str | None]) -> None:
+        """Write tag values into a photo. Fails unless ExifTool reports the photo updated or unchanged.
+
+        A value of None deletes the tag; an empty string writes the tag with an empty value.
+        """
+        stdout, stderr = self.execute(*(_assignment(tag, value) for tag, value in values.items()), photo)
         if "Error" in stderr or ("1 image files updated" not in stdout and "1 image files unchanged" not in stdout):
             raise ExifToolError(f"ExifTool could not write {photo}: {(stderr or stdout).strip()}")
 
@@ -109,3 +112,11 @@ class ExifTool:
             if line.rstrip("\r\n") == marker:
                 return "".join(lines)
             lines.append(line)
+
+
+def _assignment(tag: str, value: str | None) -> str:
+    if value is None:
+        return f"-{tag}="  # deletes the tag
+    if value == "":
+        return f"-{tag}^="  # "-TAG=" would delete it instead
+    return f"-{tag}={value}"
