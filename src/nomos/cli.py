@@ -10,7 +10,7 @@ from nomos.errors import NomosError
 from nomos.exiftool import find_exiftool
 from nomos.report import DEFAULT_REPORT, Report
 from nomos.resolve import resolve_library
-from nomos.write import summary as write_summary
+from nomos.summary import photos, summary
 from nomos.write import WriteOptions, WriteOutcome, write_tags
 
 
@@ -106,12 +106,11 @@ def _write_tags(args: argparse.Namespace) -> int:
             f"Once you have checked the result, remove the backups with: {remove}"
         )
     if stale := outcomes[WriteOutcome.SKIPPED_STALE]:
-        noun = "photo was" if stale == 1 else "photos were"
         print(
-            f"{stale} {noun} missing or re-geotagged since the report was made. "
+            f"{photos(stale)} {'was' if stale == 1 else 'were'} missing or re-geotagged since the report was made. "
             f"Re-run `nomos resolve` on the library and review the new report to tag them."
         )
-    print(write_summary(outcomes))  # always the last line
+    print(summary(outcomes, WriteOutcome))  # always the last line
     return 0
 
 

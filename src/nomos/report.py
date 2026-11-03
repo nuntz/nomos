@@ -11,6 +11,7 @@ from pathlib import Path
 
 from nomos.errors import NomosError
 from nomos.location import Location, LookupResult, LookupStatus
+from nomos.summary import summary
 
 DEFAULT_REPORT = Path("nomos-report.json")
 
@@ -85,9 +86,7 @@ class Report:
 
     def summary(self) -> str:
         """One line with the count of photos per Lookup status."""
-        counts = Counter(record.result.status for record in self.photos)
-        noun = "photo" if len(self.photos) == 1 else "photos"
-        return f"{len(self.photos)} {noun}: " + ", ".join(f"{status} {counts[status]}" for status in LookupStatus)
+        return summary(Counter(record.result.status for record in self.photos), LookupStatus)
 
     def save(self, path: Path) -> None:
         data = {

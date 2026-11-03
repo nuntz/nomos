@@ -210,10 +210,3 @@ def _write_photo(exiftool: ExifTool, report: Report, record: PhotoRecord, option
             "were written (writing UTF-8 IIM would garble it)"
         )
     return WriteOutcome.WRITTEN
-
-
-def summary(outcomes: Counter[WriteOutcome]) -> str:
-    """One line with the count of photos per Write outcome."""
-    total = sum(outcomes.values())
-    noun = "photo" if total == 1 else "photos"
-    return f"{total} {noun}: " + ", ".join(f"{outcome} {outcomes[outcome]}" for outcome in WriteOutcome)
