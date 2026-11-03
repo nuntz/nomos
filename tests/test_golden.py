@@ -15,8 +15,8 @@ them and downloads nothing. CI runs this suite on a schedule and when the manife
 To add a case, add a row to GOLDEN. Every coordinate that the spec does not give is chosen and
 verified against v6.0.0 when the row is written, never guessed; note the margin to the nearest
 boundary in the comment. A row states the Lookup status and the whole expected Location (or
-None). Rows for later Lookup statuses that need more (the candidates of an ambiguous lookup,
-the distance of a Nearby match) add an optional field to Golden and an assertion for it.
+None), and for an ambiguous lookup every candidate. Rows for later Lookup statuses that need
+more (the distance of a Nearby match) add an optional field to Golden and an assertion for it.
 """
 
 import os
@@ -40,6 +40,7 @@ class Golden:
     lon: float
     status: LookupStatus
     location: Location | None = None
+    candidates: frozenset[Location] = frozenset()
 
 
 BRITISH_COLUMBIA = Location("Canada", "CA", "British Columbia", "82249235B24619009834807")
@@ -71,6 +72,17 @@ GOLDEN = [
         "Pristina, Kosovo", 42.66, 21.17, LookupStatus.MATCHED,
         Location("Kosovo", None, "District of Prishtina", "2360587B5118871504069"),
     ),
+    # Open water: the nearest Region, British Columbia, is 15.4 km away, beyond any Nearby match.
+    Golden("Strait of Georgia", 49.25, -123.6, LookupStatus.NO_MATCH),
+    # Chosen: in the Kafia Kingi area, ADM1 South Darfur (Sudan) lies inside ADM0 South Sudan.
+    # 49.4 km inside South Darfur and 39.4 km inside South Sudan.
+    Golden(
+        "South Darfur inside South Sudan", 9.3, 24.1, LookupStatus.AMBIGUOUS,
+        candidates=frozenset({
+            Location("Sudan", "SD", "South Darfur", "86620642B33888251991816"),
+            Location("South Sudan", "SS"),
+        }),
+    ),
 ]
 
 
@@ -92,3 +104,4 @@ def test_golden(v6_index, golden):
 
     assert result.status is golden.status
     assert result.location == golden.location
+    assert set(result.candidates) == golden.candidates

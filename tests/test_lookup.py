@@ -6,7 +6,10 @@ import pytest
 
 from conftest import FIXTURE_DATASET
 from nomos.boundary_index import BoundaryDataError, BoundaryIndex
-from nomos.location import LookupStatus
+from nomos.location import Location, LookupStatus
+
+BRITISH_COLUMBIA = Location("Canada", "CA", "British Columbia", "fixture-CAN-BC")
+ALBERTA = Location("Canada", "CA", "Alberta", "fixture-CAN-AB")
 
 
 @pytest.fixture(scope="module")
@@ -59,6 +62,43 @@ def test_points_on_both_sides_of_the_antimeridian_and_exactly_on_it_are_matched(
     assert result.location.country_code == "FJ"
 
 
+def test_point_on_an_edge_shared_by_two_regions_is_ambiguous_and_lists_both(index):
+    result = index.lookup(55.0, -120.0)
+
+    assert result.status is LookupStatus.AMBIGUOUS
+    assert result.location is None
+    assert set(result.candidates) == {BRITISH_COLUMBIA, ALBERTA}
+
+
+def test_region_whose_country_disagrees_with_the_containing_country_is_ambiguous_and_lists_both(index):
+    # Kordofan (Sudan) reaches into ADM0 South Sudan between lat 9.5 and 10.
+    result = index.lookup(9.75, 32.0)
+
+    assert result.status is LookupStatus.AMBIGUOUS
+    assert result.location is None
+    assert set(result.candidates) == {
+        Location("Sudan", "SD", "Kordofan", "fixture-SDN-KOR"),
+        Location("South Sudan", "SS"),
+    }
+
+
+def test_region_on_a_border_between_countries_is_matched_when_one_of_them_is_its_country(index):
+    # Lat 50 is the Canada / United States border in ADM0; only British Columbia reaches it in ADM1.
+    result = index.lookup(50.0, -125.0)
+
+    assert result.status is LookupStatus.MATCHED
+    assert result.location == BRITISH_COLUMBIA
+
+
+def test_point_outside_every_region_and_every_country_is_no_match(index):
+    # Open sea, 10 degrees west of British Columbia and far beyond any Nearby match tolerance.
+    result = index.lookup(55.0, -140.0)
+
+    assert result.status is LookupStatus.NO_MATCH
+    assert result.location is None
+    assert result.candidates == ()
+
+
 def rewrite_coordinates(source, dest, transform):
     """Copy a GeoJSON file, passing every (lon, lat) pair through transform."""
     data = json.loads(source.read_text(encoding="utf-8"))
@@ -100,3 +140,36 @@ def test_building_tolerates_float_noise_just_beyond_180_but_not_more(tmp_path):
     assert BoundaryIndex.build(adm0=noisy, adm1=adm1).lookup(-17.0, 180.0).status is LookupStatus.MATCHED
     with pytest.raises(BoundaryDataError, match="ADM0"):
         BoundaryIndex.build(adm0=beyond, adm1=adm1)
+
+
+@pytest.mark.parametrize(
+    "lat, lon, reason",
+    [
+        (float("nan"), -125.0, "latitude"),
+        (55.0, float("nan"), "longitude"),
+        (float("inf"), -125.0, "latitude"),
+        (55.0, float("-inf"), "longitude"),
+        (-125.0, 55.0, "latitude"),  # British Columbia with latitude and longitude swapped
+        (90.5, 0.0, "latitude"),
+        (-90.5, 0.0, "latitude"),
+        (0.0, 180.5, "longitude"),
+        (0.0, -180.5, "longitude"),
+    ],
+    ids=["NaN latitude", "NaN longitude", "infinite latitude", "infinite longitude",
+         "swapped latitude and longitude", "latitude above 90", "latitude below -90",
+         "longitude above 180", "longitude below -180"],
+)
+def test_coordinates_that_are_not_finite_or_out_of_range_are_invalid_input_with_a_reason(
+    index, lat, lon, reason
+):
+    result = index.lookup(lat, lon)
+
+    assert result.status is LookupStatus.INVALID_INPUT
+    assert reason in result.reason
+    assert result.location is None
+    assert result.candidates == ()
+
+
+@pytest.mark.parametrize("lat, lon", [(90.0, 0.0), (-90.0, 0.0)], ids=["North Pole", "South Pole"])
+def test_the_poles_are_valid_input(index, lat, lon):
+    assert index.lookup(lat, lon).status is not LookupStatus.INVALID_INPUT

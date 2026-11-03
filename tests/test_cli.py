@@ -381,3 +381,82 @@ def test_write_tags_writes_no_nomos_namespace_into_photos_it_does_not_write(nomo
     assert "skipped_unresolved 2" in result.stdout
     for photo in (no_gps, open_water):
         assert read_tags(photo, "XMP-nomos:all") == {}
+
+
+def test_resolve_lists_the_candidates_of_ambiguous_photos_in_the_report(nomos, tmp_path):
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "border.jpg", 55.0, -120.0)  # on the British Columbia / Alberta edge
+    make_geotagged_jpeg(library / "kordofan.jpg", 9.75, 32.0)  # Sudan's Kordofan inside South Sudan
+    nomos("build-index")
+
+    result = nomos("resolve", str(library))
+
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    records = {record["path"]: record for record in report["photos"]}
+    assert records["border.jpg"]["lookup_status"] == "ambiguous"
+    assert "caption" not in records["border.jpg"]
+    assert sorted(records["border.jpg"]["candidates"], key=lambda c: c["caption"]) == [
+        {
+            "country_code": "CA",
+            "country": "Canada",
+            "region_id": "fixture-CAN-AB",
+            "region": "Alberta",
+            "caption": "Alberta, Canada",
+        },
+        {
+            "country_code": "CA",
+            "country": "Canada",
+            "region_id": "fixture-CAN-BC",
+            "region": "British Columbia",
+            "caption": "British Columbia, Canada",
+        },
+    ]
+    assert records["kordofan.jpg"]["lookup_status"] == "ambiguous"
+    assert sorted(records["kordofan.jpg"]["candidates"], key=lambda c: c["caption"]) == [
+        {
+            "country_code": "SD",
+            "country": "Sudan",
+            "region_id": "fixture-SDN-KOR",
+            "region": "Kordofan",
+            "caption": "Kordofan, Sudan",
+        },
+        {
+            "country_code": "SS",
+            "country": "South Sudan",
+            "region_id": None,
+            "region": None,
+            "caption": "South Sudan",
+        },
+    ]
+    assert "ambiguous 2" in result.stdout.splitlines()[-1]
+
+
+def test_write_tags_writes_nothing_to_ambiguous_no_match_or_invalid_input_photos(nomos, tmp_path):
+    library = tmp_path / "library"
+    photos = {
+        "border.jpg": make_geotagged_jpeg(library / "border.jpg", 55.0, -120.0),
+        "open-water.jpg": make_geotagged_jpeg(library / "open-water.jpg", 55.0, -140.0),
+        # ExifTool keeps an EXIF longitude beyond 180 as it is, as in corrupt metadata.
+        "corrupt.jpg": make_jpeg(
+            library / "corrupt.jpg",
+            "-EXIF:GPSLatitude=55", "-EXIF:GPSLatitudeRef=N",
+            "-EXIF:GPSLongitude=200", "-EXIF:GPSLongitudeRef=E",
+        ),
+    }
+    before = {name: photo.read_bytes() for name, photo in photos.items()}
+    nomos("build-index")
+    nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    records = {record["path"]: record for record in report["photos"]}
+    assert {path: record["lookup_status"] for path, record in records.items()} == {
+        "border.jpg": "ambiguous",
+        "open-water.jpg": "no_match",
+        "corrupt.jpg": "invalid_input",
+    }
+    assert "longitude" in records["corrupt.jpg"]["reason"]
+
+    result = nomos("write-tags", "nomos-report.json")
+
+    assert "written 0" in result.stdout
+    assert "skipped_unresolved 3" in result.stdout
+    assert {name: photo.read_bytes() for name, photo in photos.items()} == before
