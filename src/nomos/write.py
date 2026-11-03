@@ -1,5 +1,6 @@
 """`nomos write-tags`: write each resolved Location from a report into its photo's XMP fields.
 
+Only the location fields and the Nomos namespace are written; the Description is never changed.
 ExifTool rewrites only the metadata; the image data is never re-encoded.
 """
 
@@ -153,7 +154,9 @@ def write_tags(
     since the report was made, is skipped as stale.
 
     A photo that already has a Location is skipped, unless overwrite is set and the photo
-    carries the Nomos namespace: then Nomos wrote that Location, and it is replaced.
+    carries the Nomos namespace: then Nomos wrote that Location, and it is replaced. Replacing
+    removes every location field the new Location leaves out, in XMP and IIM alike, so a stale
+    Region never survives; without iptc, that includes any IIM location fields.
 
     ExifTool keeps a "<photo>_original" backup of each written photo, unless in_place is set.
 
@@ -191,19 +194,19 @@ def _write_photo(
     if replacing and not (overwrite and written_by_nomos(current)):
         return WriteOutcome.SKIPPED_EXISTING
     tags: dict[str, str | None] = location_tags(location) | nomos_tags(record, report.dataset_release)
-    if iptc:
-        if marking_iim_utf8_would_garble(exiftool.read([photo], ["IPTC:all"]).get(photo, {})):
-            warn(
-                f"{record.path}: existing IPTC-IIM text is not UTF-8, so only the XMP fields "
-                "were written (writing UTF-8 IIM would garble it)"
-            )
-        else:
-            tags |= iptc_tags(location)
+    iim_would_garble = iptc and marking_iim_utf8_would_garble(exiftool.read([photo], ["IPTC:all"]).get(photo, {}))
+    if iptc and not iim_would_garble:
+        tags |= iptc_tags(location)
     if replacing:
         tags = replacement(current, tags)
         if tags is None:
             return WriteOutcome.SKIPPED_EXISTING
     exiftool.write(photo, tags, keep_backup=not in_place)
+    if iim_would_garble:
+        warn(
+            f"{record.path}: existing IPTC-IIM text is not UTF-8, so only the XMP fields "
+            "were written (writing UTF-8 IIM would garble it)"
+        )
     return WriteOutcome.WRITTEN
 
 

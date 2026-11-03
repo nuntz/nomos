@@ -97,19 +97,19 @@ def _write_tags(args: argparse.Namespace) -> int:
         warn=_warn,
         on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
     )
-    print(write_summary(outcomes))
-    if stale := outcomes[WriteOutcome.SKIPPED_STALE]:
-        noun = "photo was" if stale == 1 else "photos were"
-        print(
-            f"{stale} {noun} missing or re-geotagged since the report was made. "
-            f"Re-run `nomos resolve` on the library and review the new report to tag them."
-        )
     if outcomes[WriteOutcome.WRITTEN] and not args.in_place:
         remove = f"exiftool -r '-delete_original!' {shlex.quote(str(report.library_root))}"
         print(
             "ExifTool kept each written photo's original as <photo>_original. "
             f"Once you have checked the result, remove the backups with: {remove}"
         )
+    if stale := outcomes[WriteOutcome.SKIPPED_STALE]:
+        noun = "photo was" if stale == 1 else "photos were"
+        print(
+            f"{stale} {noun} missing or re-geotagged since the report was made. "
+            f"Re-run `nomos resolve` on the library and review the new report to tag them."
+        )
+    print(write_summary(outcomes))  # always the last line
     return 0
 
 

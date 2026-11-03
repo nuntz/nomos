@@ -162,7 +162,7 @@ def test_photos_moved_or_regeotagged_after_resolve_are_skipped_stale(nomos, tmp_
     assert "skipped_stale moved.jpg" in lines
     assert "skipped_stale regeotagged.jpg" in lines
     assert "written unchanged.jpg" in lines
-    assert "3 photos: written 1, skipped_existing 0, skipped_unresolved 0, skipped_stale 2" in lines
+    assert lines[-1] == "3 photos: written 1, skipped_existing 0, skipped_unresolved 0, skipped_stale 2"
     assert "re-run `nomos resolve`" in result.stdout.lower()
     assert read_tags(regeotagged, *XMP_LOCATION, "XMP-nomos:all") == {}
     assert read_tags(library / "elsewhere.jpg", *XMP_LOCATION, "XMP-nomos:all") == {}
