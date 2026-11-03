@@ -22,6 +22,10 @@ class ExifToolError(NomosError):
     pass
 
 
+class PhotoError(ExifToolError):
+    """ExifTool could not process one photo. It is still running, so other photos can go on."""
+
+
 def find_exiftool() -> str:
     """Return the path of the ExifTool executable, or fail with a clear message."""
     path = shutil.which("exiftool")
@@ -93,7 +97,8 @@ class ExifTool:
         return {by_name[record.pop("SourceFile")]: record for record in records}
 
     def write(self, photo: Path, values: Mapping[str, str | None], keep_backup: bool = True) -> None:
-        """Write tag values into a photo. Fails unless ExifTool reports the photo updated or unchanged.
+        """Write tag values into a photo. Raises PhotoError unless ExifTool reports the photo
+        updated or unchanged.
 
         A value of None deletes the tag; an empty string writes the tag with an empty value.
         With keep_backup, ExifTool keeps the original file as "<photo>_original"; it never replaces
@@ -103,7 +108,7 @@ class ExifTool:
         assignments = (_assignment(tag, value) for tag, value in values.items())
         stdout, stderr = self.execute(*options, *assignments, photo)
         if "Error" in stderr or ("1 image files updated" not in stdout and "1 image files unchanged" not in stdout):
-            raise ExifToolError(f"ExifTool could not write {photo}: {(stderr or stdout).strip()}")
+            raise PhotoError(f"ExifTool could not write the photo: {_problem(stderr or stdout, photo)}")
 
     @staticmethod
     def _read_until(stream, marker: str) -> str:
@@ -116,6 +121,14 @@ class ExifTool:
             if line.rstrip("\r\n") == marker:
                 return "".join(lines)
             lines.append(line)
+
+
+def _problem(output: str, photo: Path) -> str:
+    """What ExifTool reported about a photo: its error messages, without the "Error: " prefix
+    and the photo's path, or else all it printed."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    errors = [line.removeprefix("Error: ").removesuffix(f" - {photo}") for line in lines if line.startswith("Error")]
+    return "; ".join(errors or lines)
 
 
 def _assignment(tag: str, value: str | None) -> str:

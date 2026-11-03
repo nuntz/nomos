@@ -88,31 +88,31 @@ def index_path(manifest: Manifest) -> Path:
     return release_dir(manifest) / f"index-{hashlib.sha256(canonical).hexdigest()[:16]}.pickle"
 
 
-def build_index(manifest: Manifest, progress=print) -> Path:
+def build_index(manifest: Manifest) -> Path:
     """Make sure the release's files are downloaded and verified, and that the boundary index
     built from this manifest is in the cache. Only what is missing or stale is fetched or built."""
     path = index_path(manifest)
-    paths = _verified_files(manifest, progress, download=True)
+    paths = _verified_files(manifest, download=True)
     if _load_current(path) is not None:
-        progress(f"The boundary index for Dataset release {manifest.release} is up to date")
+        print(f"The boundary index for Dataset release {manifest.release} is up to date")
         return path
-    _build(manifest, paths, progress)
+    _build(manifest, paths)
     return path
 
 
-def load_index(manifest: Manifest, progress=print) -> BoundaryIndex:
+def load_index(manifest: Manifest) -> BoundaryIndex:
     """Load the boundary index built from this manifest. A missing or stale index is rebuilt from
     the verified downloads in the cache; nothing is downloaded."""
     index = _load_current(index_path(manifest))
     if index is None:
         try:
-            paths = _verified_files(manifest, progress, download=False)
+            paths = _verified_files(manifest, download=False)
         except DatasetError as error:
             raise DatasetError(
                 f"no boundary index for the current manifest of Dataset release {manifest.release} "
                 f"({error}); run `nomos build-index` first"
             )
-        index = _build(manifest, paths, progress)
+        index = _build(manifest, paths)
     return index
 
 
@@ -123,8 +123,8 @@ def _load_current(path: Path) -> BoundaryIndex | None:
         return None
 
 
-def _build(manifest: Manifest, paths: dict[str, Path], progress) -> BoundaryIndex:
-    progress(f"Building the boundary index for Dataset release {manifest.release}")
+def _build(manifest: Manifest, paths: dict[str, Path]) -> BoundaryIndex:
+    print(f"Building the boundary index for Dataset release {manifest.release}")
     index = BoundaryIndex.build(adm0=paths["ADM0"], adm1=paths["ADM1"])
     path = index_path(manifest)
     index.save(path)
@@ -134,7 +134,7 @@ def _build(manifest: Manifest, paths: dict[str, Path], progress) -> BoundaryInde
     return index
 
 
-def _verified_files(manifest: Manifest, progress, *, download: bool) -> dict[str, Path]:
+def _verified_files(manifest: Manifest, *, download: bool) -> dict[str, Path]:
     folder = release_dir(manifest)
     folder.mkdir(parents=True, exist_ok=True)
     paths = {}
@@ -142,9 +142,9 @@ def _verified_files(manifest: Manifest, progress, *, download: bool) -> dict[str
         entry = manifest.files[layer]
         dest = folder / entry.filename
         if _verifies(entry, dest):
-            progress(f"{layer}: using the verified download at {dest}")
+            print(f"{layer}: using the verified download at {dest}")
         elif download:
-            progress(f"Downloading {layer} from {entry.url}")
+            print(f"Downloading {layer} from {entry.url}")
             _download_verified(layer, entry, dest)
         else:
             raise DatasetError(f"no verified {layer} download")
@@ -166,7 +166,7 @@ def _verifies(entry: DatasetFile, path: Path) -> bool:
     return digest.hexdigest() == entry.sha256
 
 
-def _download_verified(layer: str, entry: DatasetFile, dest: Path) -> Path:
+def _download_verified(layer: str, entry: DatasetFile, dest: Path) -> None:
     partial = dest.with_name(dest.name + ".part")
     digest = hashlib.sha256()
     size = 0
@@ -187,4 +187,3 @@ def _download_verified(layer: str, entry: DatasetFile, dest: Path) -> Path:
             "Refusing to use it."
         )
     partial.replace(dest)
-    return dest

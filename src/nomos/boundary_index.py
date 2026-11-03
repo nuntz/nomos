@@ -7,6 +7,7 @@ ADM1 files (or load a saved one), then call `lookup(lat, lon)`.
 import math
 import pickle
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -38,12 +39,21 @@ class BoundaryDataError(NomosError):
     """A boundary file is not usable as a Dataset release layer."""
 
 
+class ShapeType(StrEnum):
+    """The kind of a boundary feature, as the dataset's shapeType field names it."""
+
+    REGION = "ADM1"
+    COUNTRY = "ADM0"  # in ADM1, a whole-country feature such as Vatican City
+    DISPUTED = "DISP"  # a Disputed area
+
+
 @dataclass(frozen=True)
 class _Unit:
     """One feature of a layer: a Region (ADM1) or a Country (ADM0).
 
     shape_group is the Country's ISO alpha-3 code, or a non-ISO code for a Disputed area.
-    shape_type is ADM1, ADM0 (a whole-country feature) or DISP (a Disputed area).
+    shape_type is the dataset's shapeType, compared with ShapeType: ADM1, ADM0 (a whole-country
+    feature) or DISP (a Disputed area).
     """
 
     name: str
@@ -55,7 +65,7 @@ class _Unit:
     def is_country(self) -> bool:
         """Whether the unit stands for a Country rather than a Region: an ADM0 unit, or in ADM1 a
         whole-country feature (such as Vatican City) or a Disputed area."""
-        return self.shape_type != "ADM1"
+        return self.shape_type != ShapeType.REGION
 
 
 class _Layer:
@@ -130,8 +140,11 @@ class BoundaryIndex:
     def __init__(self, countries: _Layer, regions: _Layer):
         self._countries = countries  # ADM0
         self._regions = regions  # ADM1
-        # ADM1 has no Country name field, so a Region's Country is named by its ADM0 unit.
-        self._country_names = {unit.shape_group: unit.name for unit in countries.units}
+        # ADM1 has no Country name field, so a Region's Country is named by its ADM0 unit. A
+        # Disputed area may share a Country's shapeGroup; the Country's own unit names it.
+        self._country_names: dict[str, str] = {}
+        for unit in sorted(countries.units, key=lambda unit: unit.shape_type == ShapeType.DISPUTED):
+            self._country_names.setdefault(unit.shape_group, unit.name)
 
     @classmethod
     def build(cls, adm0: Path, adm1: Path) -> "BoundaryIndex":
@@ -230,7 +243,7 @@ class BoundaryIndex:
     def _country_location(self, country: _Unit) -> Location:
         """The Country-only Location of a unit that stands for a Country, under the dataset's name
         for it. A Disputed area has no country code, even when its shapeGroup is an ISO code."""
-        code = None if country.shape_type == "DISP" else alpha2_for(country.shape_group)
+        code = None if country.shape_type == ShapeType.DISPUTED else alpha2_for(country.shape_group)
         return Location(country=country.name, country_code=code)
 
 
