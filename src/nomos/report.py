@@ -37,6 +37,8 @@ class PhotoRecord:
             record |= _location_to_json(location)
         if self.result.candidates:
             record["candidates"] = [_location_to_json(candidate) for candidate in self.result.candidates]
+        if self.result.distance_m is not None:
+            record["distance_m"] = round(self.result.distance_m, 1)
         if self.result.reason is not None:
             record["reason"] = self.result.reason
         return record
@@ -47,6 +49,7 @@ class PhotoRecord:
             status=LookupStatus(record["lookup_status"]),
             location=_location_from_json(record) if "country" in record else None,
             candidates=tuple(_location_from_json(candidate) for candidate in record.get("candidates", ())),
+            distance_m=record.get("distance_m"),
             reason=record.get("reason"),
         )
         return cls(record["path"], record.get("latitude"), record.get("longitude"), result)

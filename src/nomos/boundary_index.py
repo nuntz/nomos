@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import shapely
+from pyproj import CRS, Transformer
 from shapely import STRtree
 
 from nomos.country_codes import alpha2_for
@@ -24,6 +25,9 @@ INDEX_FORMAT = 2
 # polygons are split at ±180. Boundary data may stray this far outside the lon/lat range; input
 # coordinates may not.
 COORDINATE_TOLERANCE = 1e-9
+
+# A point outside every Region is a Nearby match to the nearest Region this close, in metres.
+NEARBY_RADIUS_M = 5000.0
 
 
 class IndexFormatError(Exception):
@@ -88,6 +92,28 @@ class _Layer:
         hits = self._tree.query(point, predicate="covered_by")
         return [self.units[i] for i in sorted({int(i) for i in self.component_unit[hits]})]
 
+    def within(self, lat: float, lon: float, radius_m: float) -> list[tuple[float, _Unit]]:
+        """The units within radius_m of the point, measured geodesically, nearest first, each
+        with its distance in metres. Every component in the search window is measured, since the
+        nearest component in degrees is not always the nearest one on the ground."""
+        windows = _search_windows(lat, lon, radius_m)
+        hits = np.unique(np.concatenate([self._tree.query(window, predicate="intersects") for window in windows]))
+        if hits.size == 0:
+            return []
+        to_metres = _azimuthal_equidistant(lat, lon)
+        distances = np.full(hits.size, np.inf)
+        for window in windows:
+            # Clip to the window so that only the part near the point is projected, and densify
+            # so that edges stay true once projected.
+            near = shapely.segmentize(shapely.clip_by_rect(self.components[hits], *window.bounds), 0.01)
+            projected = shapely.transform(near, lambda xy: np.column_stack(to_metres.transform(xy[:, 0], xy[:, 1])))
+            distances = np.fmin(distances, shapely.distance(projected, _ORIGIN))
+        nearest: dict[int, float] = {}
+        for unit, distance in zip(self.component_unit[hits], distances):
+            if distance <= radius_m and distance < nearest.get(int(unit), np.inf):
+                nearest[int(unit)] = float(distance)
+        return sorted(((distance, self.units[unit]) for unit, distance in nearest.items()), key=lambda hit: hit[0])
+
     def to_state(self) -> dict:
         return {
             "units": self.units,
@@ -144,11 +170,26 @@ class BoundaryIndex:
         # 3 and 4. A point in at least one Region is matched or ambiguous.
         if regions:
             return self._resolve_regions(regions, countries)
-        # 5. A Nearby match (#7) goes here, before the Country-only Location of step 6.
+        # 5. Otherwise, the nearest Region within 5 km is a Nearby match.
+        if (nearby := self._nearby(lat, lon, countries)) is not None:
+            return nearby
         # 6. A point in a Country but in no Region gets a Country-only Location.
         if countries:
             return self._resolve_countries(countries)
         return LookupResult(LookupStatus.NO_MATCH)
+
+    def _nearby(self, lat: float, lon: float, countries: list[_Unit]) -> LookupResult | None:
+        """The nearest Region within 5 km, as a Nearby match. A point inside a Country only
+        matches that Country's Regions, so that a lake-shore photo isn't assigned across a border."""
+        containing = {country.shape_group for country in countries}
+        for distance, region in self._regions.within(lat, lon, NEARBY_RADIUS_M):
+            if containing and region.shape_group not in containing:
+                continue
+            if region.is_country:
+                # Near a whole-country feature or a Disputed area, the point gets that Country.
+                return LookupResult(LookupStatus.COUNTRY_ONLY, self._region_location(region))
+            return LookupResult(LookupStatus.NEARBY, self._region_location(region), distance_m=distance)
+        return None
 
     def _resolve_regions(self, regions: list[_Unit], countries: list[_Unit]) -> LookupResult:
         """Matched when exactly one Region covers the point and its Country is a containing
@@ -201,6 +242,38 @@ def _invalid_input_reason(lat: float, lon: float) -> str | None:
         if not -limit <= value <= limit:
             return f"{name} {value!r} is outside [-{limit}, {limit}]"
     return None
+
+
+# Below the Earth's smallest radius of curvature (6,335 km, north-south at the equator), so that a
+# search window made with it is never too small.
+_SEARCH_EARTH_RADIUS_M = 6_300_000.0
+_LON_LAT = CRS.from_epsg(4326)
+_ORIGIN = shapely.Point(0, 0)
+
+
+def _search_windows(lat: float, lon: float, radius_m: float) -> list[shapely.Polygon]:
+    """Longitude and latitude boxes that together hold every point within radius_m of the point.
+    A window that crosses ±180 is split in two, and one that reaches a pole spans every longitude."""
+    angle = radius_m / _SEARCH_EARTH_RADIUS_M  # radians of arc
+    south, north = max(lat - math.degrees(angle), -90.0), min(lat + math.degrees(angle), 90.0)
+    reach = math.sin(angle) / math.cos(math.radians(lat))
+    if south == -90.0 or north == 90.0 or reach >= 1:
+        return [shapely.box(-180.0, south, 180.0, north)]
+    dlon = math.degrees(math.asin(reach))
+    west, east = lon - dlon, lon + dlon
+    windows = [shapely.box(max(west, -180.0), south, min(east, 180.0), north)]
+    if east > 180:
+        windows.append(shapely.box(-180.0, south, east - 360, north))
+    if west < -180:
+        windows.append(shapely.box(west + 360, south, 180.0, north))
+    return windows
+
+
+def _azimuthal_equidistant(lat: float, lon: float) -> Transformer:
+    """A projection in metres centred on the point, in which the distance from the centre to any
+    point is its geodesic distance."""
+    centred = CRS.from_proj4(f"+proj=aeqd +lat_0={lat} +lon_0={lon} +datum=WGS84 +units=m")
+    return Transformer.from_crs(_LON_LAT, centred, always_xy=True)
 
 
 def _check_lon_lat(layer: str, bounds) -> None:

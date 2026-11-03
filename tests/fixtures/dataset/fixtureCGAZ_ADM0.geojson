@@ -11,6 +11,9 @@
 { "type": "Feature", "properties": { "shapeGroup": "VAT", "shapeType": "ADM0", "shapeName": "Vatican City" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 12.0, 41.0 ], [ 13.0, 41.0 ], [ 13.0, 42.0 ], [ 12.0, 42.0 ], [ 12.0, 41.0 ] ] ] } },
 { "type": "Feature", "properties": { "shapeGroup": "117", "shapeType": "DISP", "shapeName": "Falkland Islands (UK)" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -60.0, -52.0 ], [ -58.0, -52.0 ], [ -58.0, -51.0 ], [ -60.0, -51.0 ], [ -60.0, -52.0 ] ] ] } },
 { "type": "Feature", "properties": { "shapeGroup": "SSD", "shapeType": "ADM0", "shapeName": "South Sudan" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 30.0, 5.0 ], [ 35.0, 5.0 ], [ 35.0, 10.0 ], [ 30.0, 10.0 ], [ 30.0, 5.0 ] ] ] } },
-{ "type": "Feature", "properties": { "shapeGroup": "SDN", "shapeType": "ADM0", "shapeName": "Sudan" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 30.0, 10.0 ], [ 35.0, 10.0 ], [ 35.0, 15.0 ], [ 30.0, 15.0 ], [ 30.0, 10.0 ] ] ] } }
+{ "type": "Feature", "properties": { "shapeGroup": "SDN", "shapeType": "ADM0", "shapeName": "Sudan" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 30.0, 10.0 ], [ 35.0, 10.0 ], [ 35.0, 15.0 ], [ 30.0, 15.0 ], [ 30.0, 10.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "RUS", "shapeType": "ADM0", "shapeName": "Russia" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -180.0, 65.0 ], [ -175.0, 65.0 ], [ -175.0, 70.0 ], [ -180.0, 70.0 ], [ -180.0, 65.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "UGA", "shapeType": "ADM0", "shapeName": "Uganda" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 34.0, -1.0 ], [ 36.0, -1.0 ], [ 36.0, 1.0 ], [ 34.0, 1.0 ], [ 34.0, -1.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "KEN", "shapeType": "ADM0", "shapeName": "Kenya" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 36.0, -1.0 ], [ 38.0, -1.0 ], [ 38.0, 1.0 ], [ 36.0, 1.0 ], [ 36.0, -1.0 ] ] ] } }
 ]
 }

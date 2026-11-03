@@ -526,3 +526,39 @@ def test_write_tags_with_iptc_writes_country_only_locations_with_no_province_sta
     assert vatican_iim["IPTC:Country-PrimaryLocationCode"].rstrip() == "VA"  # padded to 3 octets
     assert "IPTC:Province-State" not in vatican_iim
     assert read_tags(falklands, *iim_location) == {"IPTC:Country-PrimaryLocationName": "Falkland Islands (UK)"}
+
+
+def test_nearby_matches_are_reported_with_their_distance_and_written_as_nearby(nomos, tmp_path):
+    library = tmp_path / "library"
+    shore = make_geotagged_jpeg(library / "shore.jpg", 55.0, -130.0766)  # 4.9 km off British Columbia
+    nomos("build-index")
+
+    resolved = nomos("resolve", str(library))
+
+    (record,) = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))["photos"]
+    assert record.pop("distance_m") == pytest.approx(4902, abs=1)
+    assert record == {
+        "path": "shore.jpg",
+        "latitude": 55.0,
+        "longitude": -130.0766,
+        "lookup_status": "nearby",
+        "country_code": "CA",
+        "country": "Canada",
+        "region_id": "fixture-CAN-BC",
+        "region": "British Columbia",
+        "caption": "British Columbia, Canada",
+    }
+    assert "nearby 1" in resolved.stdout.splitlines()[-1]
+
+    written = nomos("write-tags", "nomos-report.json")
+
+    assert "written 1" in written.stdout
+    location_tags = ("XMP-photoshop:State", "XMP-photoshop:Country", "XMP-iptcCore:CountryCode")
+    assert read_tags(shore, *location_tags, *NOMOS_TAGS) == {
+        "XMP-photoshop:State": "British Columbia",
+        "XMP-photoshop:Country": "Canada",
+        "XMP-iptcCore:CountryCode": "CA",
+        "XMP-nomos:RegionID": "fixture-CAN-BC",
+        "XMP-nomos:DatasetRelease": "fixture-v1",
+        "XMP-nomos:LookupStatus": "nearby",
+    }

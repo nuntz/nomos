@@ -99,6 +99,71 @@ def test_point_outside_every_region_and_every_country_is_no_match(index):
     assert result.candidates == ()
 
 
+def test_point_just_outside_the_coast_within_5_km_is_a_nearby_match_with_its_distance(index):
+    # In the sea west of British Columbia, outside every Region and Country: 4,902 m from the
+    # coast at lon -130, measured geodesically (pyproj.Geod) when the test was written.
+    result = index.lookup(55.0, -130.0766)
+
+    assert result.status is LookupStatus.NEARBY
+    assert result.location == BRITISH_COLUMBIA
+    assert result.distance_m == pytest.approx(4902, abs=1)
+
+
+def test_point_off_the_coast_beyond_5_km_is_no_match(index):
+    # 5,107 m from the coast at lon -130.
+    result = index.lookup(55.0, -130.0798)
+
+    assert result.status is LookupStatus.NO_MATCH
+    assert result.location is None
+    assert result.distance_m is None
+
+
+def test_nearby_search_reaches_across_the_antimeridian(index):
+    # In the sea just east of 180; Chukotka lies only west of -180, 854 m away.
+    result = index.lookup(67.5, 179.98)
+
+    assert result.status is LookupStatus.NEARBY
+    assert result.location == Location("Russia", "RU", "Chukotka", "fixture-RUS-CHU")
+    assert result.distance_m == pytest.approx(854, abs=1)
+
+
+def test_nearby_match_inside_a_country_is_a_region_of_that_country_not_a_nearer_foreign_one(index):
+    # In ADM0 Kenya, in its strip with no Region: Eastern (Uganda) is 2,226 m away and
+    # Rift Valley (Kenya) 4,453 m.
+    result = index.lookup(0.0, 36.02)
+
+    assert result.status is LookupStatus.NEARBY
+    assert result.location == Location("Kenya", "KE", "Rift Valley", "fixture-KEN-RV")
+    assert result.distance_m == pytest.approx(4453, abs=1)
+
+
+def test_point_inside_a_country_is_country_only_when_only_a_foreign_region_is_within_5_km(index):
+    # In ADM0 Kenya: Eastern (Uganda) is 1,113 m away, Rift Valley (Kenya) 5,566 m.
+    result = index.lookup(0.0, 36.01)
+
+    assert result.status is LookupStatus.COUNTRY_ONLY
+    assert result.location == Location("Kenya", "KE")
+    assert result.distance_m is None
+
+
+@pytest.mark.parametrize(
+    "lat, lon, location",
+    [
+        (41.5, 13.02, Location("Vatican City", "VA")),  # 1.7 km east of the whole-country feature
+        (-51.5, -57.98, Location("Falkland Islands (UK)", None)),  # 1.4 km east of the Disputed area
+    ],
+    ids=["whole-country feature", "Disputed area"],
+)
+def test_point_near_a_feature_that_stands_for_a_whole_country_is_country_only_not_nearby(
+    index, lat, lon, location
+):
+    result = index.lookup(lat, lon)
+
+    assert result.status is LookupStatus.COUNTRY_ONLY
+    assert result.location == location
+    assert result.distance_m is None
+
+
 def rewrite_coordinates(source, dest, transform):
     """Copy a GeoJSON file, passing every (lon, lat) pair through transform."""
     data = json.loads(source.read_text(encoding="utf-8"))
