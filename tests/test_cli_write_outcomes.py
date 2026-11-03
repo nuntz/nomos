@@ -186,6 +186,27 @@ def test_photos_moved_or_regeotagged_after_resolve_are_skipped_stale(nomos, tmp_
     assert read_tags(library / "elsewhere.jpg", *XMP_LOCATION, "XMP-nomos:all") == {}
 
 
+def test_a_photo_exiftool_cannot_write_is_an_error_and_the_other_photos_are_still_written(nomos, tmp_path):
+    library = tmp_path / "library"
+    corrupt = make_geotagged_jpeg(library / "corrupt.jpg", *LYON)
+    corrupt.write_bytes(corrupt.read_bytes()[: corrupt.stat().st_size // 2])  # its EXIF GPS still reads
+    (library / "empty.jpg").write_bytes(b"\xff\xd8")  # ExifTool cannot read this one at all
+    make_geotagged_jpeg(library / "lyon.jpg", *LYON)
+    report = resolve(nomos, library)
+
+    result = nomos("write-tags", str(report), check=False)
+
+    assert result.returncode == 1
+    assert "nomos: error: corrupt.jpg: ExifTool could not write the photo: Corrupted JPEG image" in (
+        result.stderr.splitlines()
+    )
+    lines = result.stdout.splitlines()
+    assert "skipped_unresolved empty.jpg" in lines
+    assert "written lyon.jpg" in lines
+    assert lines[-1] == "3 photos: written 1, skipped_existing 0, skipped_unresolved 1, skipped_stale 0; errors 1"
+    assert read_tags(library / "lyon.jpg", "XMP-photoshop:State") == {"XMP-photoshop:State": "Auvergne-Rhône-Alpes"}
+
+
 def test_no_resolve_hint_when_no_photo_is_stale(nomos, tmp_path):
     make_geotagged_jpeg(tmp_path / "library" / "lyon.jpg", *LYON)
     report = resolve(nomos, tmp_path / "library")

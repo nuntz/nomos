@@ -8,7 +8,7 @@ from pathlib import Path
 from nomos.dataset import Manifest, build_index, load_index
 from nomos.errors import NomosError
 from nomos.exiftool import find_exiftool
-from nomos.report import DEFAULT_REPORT, Report
+from nomos.report import DEFAULT_REPORT, PhotoRecord, Report
 from nomos.resolve import resolve_library
 from nomos.summary import photos, summary
 from nomos.write import WriteOptions, WriteOutcome, write_tags
@@ -74,6 +74,10 @@ def _warn(message: str) -> None:
     print(f"nomos: warning: {message}", file=sys.stderr)
 
 
+def _error(message: str) -> None:
+    print(f"nomos: error: {message}", file=sys.stderr)
+
+
 def _build_index(args: argparse.Namespace) -> int:
     manifest = Manifest.load()
     index_path = build_index(manifest)
@@ -94,10 +98,17 @@ def _resolve(args: argparse.Namespace) -> int:
 def _write_tags(args: argparse.Namespace) -> int:
     report = Report.load(args.report)
     options = WriteOptions(iptc=args.iptc, overwrite=args.overwrite, in_place=args.in_place, warn=_warn)
+    failed: list[str] = []
+
+    def on_error(record: PhotoRecord, message: str) -> None:
+        failed.append(record.path)
+        _error(f"{record.path}: {message}")
+
     outcomes = write_tags(
         report,
         options,
         on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
+        on_error=on_error,
     )
     if outcomes[WriteOutcome.WRITTEN] and not args.in_place:
         remove = f"exiftool -r '-delete_original!' {shlex.quote(str(report.library_root))}"
@@ -110,8 +121,8 @@ def _write_tags(args: argparse.Namespace) -> int:
             f"{photos(stale)} {'was' if stale == 1 else 'were'} missing or re-geotagged since the report was made. "
             f"Re-run `nomos resolve` on the library and review the new report to tag them."
         )
-    print(summary(outcomes, WriteOutcome))  # always the last line
-    return 0
+    print(summary(outcomes, WriteOutcome, errors=len(failed)))  # always the last line
+    return 1 if failed else 0
 
 
 _COMMANDS = {"build-index": _build_index, "resolve": _resolve, "write-tags": _write_tags}
@@ -123,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         find_exiftool()
         return _COMMANDS[args.command](args)
     except NomosError as error:
-        print(f"nomos: error: {error}", file=sys.stderr)
+        _error(str(error))
         return 1
 
 

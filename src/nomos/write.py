@@ -12,7 +12,7 @@ from enum import StrEnum
 from operator import attrgetter
 from pathlib import Path
 
-from nomos.exiftool import ExifTool
+from nomos.exiftool import ExifTool, PhotoError
 from nomos.location import Location, LookupStatus
 from nomos.photos import read_photo_gps
 from nomos.report import PhotoRecord, Report
@@ -170,6 +170,7 @@ def write_tags(
     report: Report,
     options: WriteOptions = WriteOptions(),
     on_outcome: Callable[[PhotoRecord, WriteOutcome], None] = lambda record, outcome: None,
+    on_error: Callable[[PhotoRecord, str], None] = lambda record, message: None,
 ) -> Counter[WriteOutcome]:
     """Write the report's Locations into its photos and count the Write outcomes.
 
@@ -183,7 +184,9 @@ def write_tags(
 
     ExifTool keeps a "<photo>_original" backup of each written photo, unless in_place is set.
 
-    Each photo's Write outcome is passed to on_outcome as soon as it is known.
+    Each photo's Write outcome is passed to on_outcome as soon as it is known. A photo ExifTool
+    fails on gets no Write outcome: why it failed is passed to on_error instead, and the other
+    photos are still written.
 
     With iptc, the legacy IPTC-IIM location fields are written too, except into a photo whose
     existing IIM is not marked as UTF-8: that photo gets its XMP fields only, and a warning.
@@ -191,7 +194,11 @@ def write_tags(
     outcomes: Counter[WriteOutcome] = Counter()
     with ExifTool() as exiftool:
         for record in report.photos:
-            outcome = _write_photo(exiftool, report, record, options)
+            try:
+                outcome = _write_photo(exiftool, report, record, options)
+            except PhotoError as error:
+                on_error(record, str(error))
+                continue
             outcomes[outcome] += 1
             on_outcome(record, outcome)
     return outcomes
