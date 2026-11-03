@@ -46,7 +46,16 @@ def _parser() -> argparse.ArgumentParser:
         description="Write the Locations from a report into the photos' XMP location fields.",
     )
     write_tags.add_argument("report", type=Path, help="a report written by `nomos resolve`")
+    write_tags.add_argument(
+        "--iptc",
+        action="store_true",
+        help="also write the legacy IPTC-IIM location fields, in UTF-8, for older software",
+    )
     return parser
+
+
+def _warn(message: str) -> None:
+    print(f"nomos: warning: {message}", file=sys.stderr)
 
 
 def _build_index(args: argparse.Namespace) -> int:
@@ -67,7 +76,7 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _write_tags(args: argparse.Namespace) -> int:
-    outcomes = write_tags(Report.load(args.report))
+    outcomes = write_tags(Report.load(args.report), iptc=args.iptc, warn=_warn)
     print(write_summary(outcomes))
     return 0
 
