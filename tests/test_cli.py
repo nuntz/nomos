@@ -4,7 +4,14 @@ import json
 import shutil
 from pathlib import Path
 
-from conftest import FIXTURE_DATASET, exiftool, make_geotagged_jpeg, read_tags, write_fixture_manifest
+from conftest import (
+    FIXTURE_DATASET,
+    exiftool,
+    make_geotagged_jpeg,
+    make_jpeg,
+    read_tags,
+    write_fixture_manifest,
+)
 
 
 def test_help_lists_the_three_commands(nomos):
@@ -179,3 +186,22 @@ def test_write_tags_writes_the_nomos_namespace_into_each_written_photo(nomos, tm
         "XMP-nomos:DatasetRelease": "fixture-v1",
         "XMP-nomos:LookupStatus": "matched",
     }
+
+
+def test_write_tags_writes_no_nomos_namespace_into_photos_it_does_not_write(nomos, tmp_path):
+    library = tmp_path / "library"
+    no_gps = make_jpeg(library / "no-gps.jpg")
+    open_water = make_geotagged_jpeg(library / "open-water.jpg", 55.0, -140.0)
+    nomos("build-index")
+    nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    assert {record["path"]: record["lookup_status"] for record in report["photos"]} == {
+        "no-gps.jpg": "no_gps",
+        "open-water.jpg": "no_match",
+    }
+
+    result = nomos("write-tags", "nomos-report.json")
+
+    assert "skipped_unresolved 2" in result.stdout
+    for photo in (no_gps, open_water):
+        assert read_tags(photo, "XMP-nomos:all") == {}
