@@ -1,0 +1,2 @@
+# The fixture Dataset release is pinned by SHA-256; keep its bytes exact on every platform.
+tests/fixtures/dataset/** -text
