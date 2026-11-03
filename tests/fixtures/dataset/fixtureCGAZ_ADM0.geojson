@@ -1,0 +1,16 @@
+{
+"type": "FeatureCollection",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "shapeGroup": "CAN", "shapeType": "ADM0", "shapeName": "Canada" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -130.0, 50.0 ], [ -110.0, 50.0 ], [ -110.0, 60.0 ], [ -130.0, 60.0 ], [ -130.0, 50.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "USA", "shapeType": "ADM0", "shapeName": "United States" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -130.0, 45.0 ], [ -110.0, 45.0 ], [ -110.0, 50.0 ], [ -130.0, 50.0 ], [ -130.0, 45.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "FRA", "shapeType": "ADM0", "shapeName": "France" }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 0.0, 40.0 ], [ 5.0, 40.0 ], [ 5.0, 45.0 ], [ 0.0, 45.0 ], [ 0.0, 40.0 ] ] ], [ [ [ -54.0, 3.0 ], [ -52.0, 3.0 ], [ -52.0, 5.0 ], [ -54.0, 5.0 ], [ -54.0, 3.0 ] ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "ZAF", "shapeType": "ADM0", "shapeName": "South Africa" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 20.0, -30.0 ], [ 30.0, -30.0 ], [ 30.0, -20.0 ], [ 20.0, -20.0 ], [ 20.0, -30.0 ] ], [ [ 24.0, -26.0 ], [ 24.0, -24.0 ], [ 26.0, -24.0 ], [ 26.0, -26.0 ], [ 24.0, -26.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "LSO", "shapeType": "ADM0", "shapeName": "Lesotho" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 24.0, -26.0 ], [ 26.0, -26.0 ], [ 26.0, -24.0 ], [ 24.0, -24.0 ], [ 24.0, -26.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "FJI", "shapeType": "ADM0", "shapeName": "Fiji" }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 178.0, -18.0 ], [ 180.0000000000001, -18.0 ], [ 180.0000000000001, -16.0 ], [ 178.0, -16.0 ], [ 178.0, -18.0 ] ] ], [ [ [ -180.0, -18.0 ], [ -178.0, -18.0 ], [ -178.0, -16.0 ], [ -180.0, -16.0 ], [ -180.0, -18.0 ] ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "VAT", "shapeType": "ADM0", "shapeName": "Vatican City" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 12.0, 41.0 ], [ 13.0, 41.0 ], [ 13.0, 42.0 ], [ 12.0, 42.0 ], [ 12.0, 41.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "117", "shapeType": "DISP", "shapeName": "Falkland Islands (UK)" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -60.0, -52.0 ], [ -58.0, -52.0 ], [ -58.0, -51.0 ], [ -60.0, -51.0 ], [ -60.0, -52.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "SSD", "shapeType": "ADM0", "shapeName": "South Sudan" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 30.0, 5.0 ], [ 35.0, 5.0 ], [ 35.0, 10.0 ], [ 30.0, 10.0 ], [ 30.0, 5.0 ] ] ] } },
+{ "type": "Feature", "properties": { "shapeGroup": "SDN", "shapeType": "ADM0", "shapeName": "Sudan" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 30.0, 10.0 ], [ 35.0, 10.0 ], [ 35.0, 15.0 ], [ 30.0, 15.0 ], [ 30.0, 10.0 ] ] ] } }
+]
+}

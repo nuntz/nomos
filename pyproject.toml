@@ -1,0 +1,29 @@
+[project]
+name = "nomos"
+version = "0.1.0"
+description = "Offline photo Location tagger: resolves photo GPS coordinates to a Region and Country and writes them into XMP."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "geopandas>=1.0",
+    "pyogrio>=0.10",
+    "shapely>=2.0",
+]
+
+[project.scripts]
+nomos = "nomos.cli:main"
+
+[dependency-groups]
+dev = [
+    "pillow>=10",
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.20"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
