@@ -9,7 +9,7 @@ from enum import StrEnum
 
 from nomos.exiftool import ExifTool
 from nomos.location import Location, LookupStatus
-from nomos.report import Report
+from nomos.report import PhotoRecord, Report
 
 WRITABLE_STATUSES = {LookupStatus.MATCHED}
 IIM_UTF8_MARKER = "\x1b%G"  # IPTC:CodedCharacterSet for UTF-8, as ExifTool reads it with -n
@@ -46,6 +46,15 @@ def iptc_tags(location: Location) -> dict[str, str]:
     return tags
 
 
+def nomos_tags(record: PhotoRecord, dataset_release: str) -> dict[str, str]:
+    """The Nomos XMP namespace fields (ADR 0001): how this photo's Location was found."""
+    return {
+        "XMP-nomos:RegionID": record.result.location.region_id,
+        "XMP-nomos:DatasetRelease": dataset_release,
+        "XMP-nomos:LookupStatus": record.result.status.value,
+    }
+
+
 def marking_iim_utf8_would_garble(iim: dict) -> bool:
     """Whether setting the UTF-8 marker would garble a photo's existing IPTC-IIM text.
 
@@ -74,7 +83,7 @@ def write_tags(
                 outcomes[WriteOutcome.SKIPPED_UNRESOLVED] += 1
                 continue
             photo = report.photo_path(record)
-            tags = location_tags(location)
+            tags = location_tags(location) | nomos_tags(record, report.dataset_release)
             if iptc:
                 if marking_iim_utf8_would_garble(exiftool.read([photo], ["IPTC:all"]).get(photo, {})):
                     warn(
