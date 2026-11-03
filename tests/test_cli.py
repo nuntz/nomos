@@ -460,3 +460,69 @@ def test_write_tags_writes_nothing_to_ambiguous_no_match_or_invalid_input_photos
     assert "written 0" in result.stdout
     assert "skipped_unresolved 3" in result.stdout
     assert {name: photo.read_bytes() for name, photo in photos.items()} == before
+
+
+def test_country_only_locations_are_reported_and_written_with_a_country_and_no_state(nomos, tmp_path):
+    library = tmp_path / "library"
+    photos = {
+        "guiana.jpg": make_geotagged_jpeg(library / "guiana.jpg", 4.0, -53.0),  # France, in no Region
+        "vatican.jpg": make_geotagged_jpeg(library / "vatican.jpg", 41.5, 12.5),  # a whole-country feature
+        "falklands.jpg": make_geotagged_jpeg(library / "falklands.jpg", -51.5, -59.0),  # a Disputed area
+    }
+    nomos("build-index")
+    resolved = nomos("resolve", str(library))
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    records = {record["path"]: record for record in report["photos"]}
+    assert records["guiana.jpg"] == {
+        "path": "guiana.jpg",
+        "latitude": 4.0,
+        "longitude": -53.0,
+        "lookup_status": "country_only",
+        "country_code": "FR",
+        "country": "France",
+        "region_id": None,
+        "region": None,
+        "caption": "France",
+    }
+    assert records["vatican.jpg"]["caption"] == "Vatican City"
+    assert records["falklands.jpg"]["caption"] == "Falkland Islands (UK)"
+    assert records["falklands.jpg"]["country_code"] is None
+    assert "country_only 3" in resolved.stdout.splitlines()[-1]
+
+    written = nomos("write-tags", "nomos-report.json")
+
+    assert "written 3" in written.stdout
+    location_tags = ("XMP-photoshop:State", "XMP-photoshop:Country", "XMP-iptcCore:CountryCode")
+    country_only = {
+        "XMP-nomos:RegionID": "",
+        "XMP-nomos:DatasetRelease": "fixture-v1",
+        "XMP-nomos:LookupStatus": "country_only",
+    }
+    assert read_tags(photos["guiana.jpg"], *location_tags, *NOMOS_TAGS) == country_only | {
+        "XMP-photoshop:Country": "France",
+        "XMP-iptcCore:CountryCode": "FR",
+    }
+    assert read_tags(photos["vatican.jpg"], *location_tags, *NOMOS_TAGS) == country_only | {
+        "XMP-photoshop:Country": "Vatican City",
+        "XMP-iptcCore:CountryCode": "VA",
+    }
+    assert read_tags(photos["falklands.jpg"], *location_tags, *NOMOS_TAGS) == country_only | {
+        "XMP-photoshop:Country": "Falkland Islands (UK)",
+    }
+
+
+def test_write_tags_with_iptc_writes_country_only_locations_with_no_province_state(nomos, tmp_path):
+    library = tmp_path / "library"
+    vatican = make_geotagged_jpeg(library / "vatican.jpg", 41.5, 12.5)
+    falklands = make_geotagged_jpeg(library / "falklands.jpg", -51.5, -59.0)
+    nomos("build-index")
+    nomos("resolve", str(library))
+
+    nomos("write-tags", "--iptc", "nomos-report.json")
+
+    iim_location = ("IPTC:Province-State", "IPTC:Country-PrimaryLocationName", "IPTC:Country-PrimaryLocationCode")
+    (vatican_iim,) = json.loads(exiftool("-json", "-G1", *(f"-{tag}" for tag in iim_location), vatican))
+    assert vatican_iim["IPTC:Country-PrimaryLocationName"] == "Vatican City"
+    assert vatican_iim["IPTC:Country-PrimaryLocationCode"].rstrip() == "VA"  # padded to 3 octets
+    assert "IPTC:Province-State" not in vatican_iim
+    assert read_tags(falklands, *iim_location) == {"IPTC:Country-PrimaryLocationName": "Falkland Islands (UK)"}
