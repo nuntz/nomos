@@ -7,8 +7,10 @@ from pathlib import Path
 from nomos.dataset import Manifest, build_index, load_index
 from nomos.errors import NomosError
 from nomos.exiftool import find_exiftool
-from nomos.report import DEFAULT_REPORT
+from nomos.report import DEFAULT_REPORT, Report
 from nomos.resolve import resolve_library
+from nomos.write import summary as write_summary
+from nomos.write import write_tags
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -65,7 +67,9 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _write_tags(args: argparse.Namespace) -> int:
-    raise NotImplementedError
+    outcomes = write_tags(Report.load(args.report))
+    print(write_summary(outcomes))
+    return 0
 
 
 _COMMANDS = {"build-index": _build_index, "resolve": _resolve, "write-tags": _write_tags}

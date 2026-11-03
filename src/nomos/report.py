@@ -82,7 +82,11 @@ class Report:
             "dataset_release": self.dataset_release,
             "photos": [record.to_json() for record in self.photos],
         }
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except OSError as error:
+            raise ReportError(f"cannot write report {path}: {error}")
 
     @classmethod
     def load(cls, path: Path) -> "Report":

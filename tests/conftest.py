@@ -43,6 +43,8 @@ from pathlib import Path
 import pytest
 
 FIXTURE_DATASET = Path(__file__).parent / "fixtures" / "dataset"
+# The `nomos` console script installed into the test environment (by `uv sync` / `uv run`).
+NOMOS_EXECUTABLE = str(Path(sys.executable).parent / "nomos")
 
 
 def write_fixture_manifest(dest: Path, dataset_dir: Path = FIXTURE_DATASET) -> Path:
@@ -68,7 +70,7 @@ class Nomos:
 
     def __call__(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
-            [sys.executable, "-m", "nomos", *args],
+            [NOMOS_EXECUTABLE, *args],
             cwd=self.cwd,
             env=self.env,
             capture_output=True,

@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from conftest import FIXTURE_DATASET, make_geotagged_jpeg, write_fixture_manifest
+from conftest import FIXTURE_DATASET, exiftool, make_geotagged_jpeg, read_tags, write_fixture_manifest
 
 
 def test_help_lists_the_three_commands(nomos):
@@ -98,3 +98,60 @@ def test_resolve_reports_the_location_of_each_photo_and_changes_no_photo(nomos, 
     )
     assert {photo: photo.read_bytes() for photo in (bc, maseru)} == before
     assert sorted(p.name for p in library.rglob("*") if p.is_file()) == ["bc.jpg", "maseru.jpg"]
+
+
+def test_resolve_writes_the_report_to_an_explicit_path(nomos, tmp_path):
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "a.jpg", 42.5, 2.5)
+    nomos("build-index")
+
+    nomos("resolve", str(library), "--report", str(tmp_path / "reports" / "lyon.json"))
+
+    report = json.loads((tmp_path / "reports" / "lyon.json").read_text(encoding="utf-8"))
+    assert report["photos"][0]["caption"] == "Auvergne-Rhône-Alpes, France"
+    assert not (nomos.cwd / "nomos-report.json").exists()
+
+
+def test_resolve_uses_the_cached_index_without_the_boundary_files(nomos, tmp_path):
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+    nomos("build-index")
+    release_dir = Path(nomos.env["XDG_CACHE_HOME"]) / "nomos" / "fixture-v1"
+    for boundary_file in release_dir.glob("*.geojson"):
+        boundary_file.unlink()
+
+    nomos("resolve", str(library))
+
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    assert report["photos"][0]["region"] == "British Columbia"
+
+
+def image_data_hash(photo: Path) -> str:
+    return exiftool("-s3", "-api", "ImageHashType=SHA256", "-ImageDataHash", photo).strip()
+
+
+def test_write_tags_writes_the_location_of_matched_photos_into_standard_xmp_fields(nomos, tmp_path):
+    library = tmp_path / "library"
+    lyon = make_geotagged_jpeg(library / "DCIM" / "lyon.jpg", 44.75, 4.5)
+    maseru = make_geotagged_jpeg(library / "maseru.jpg", -25.0, 25.0)
+    image_data = {photo: image_data_hash(photo) for photo in (lyon, maseru)}
+    nomos("build-index")
+    nomos("resolve", str(library))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    shutil.move(nomos.cwd / "nomos-report.json", elsewhere / "report.json")
+
+    nomos("write-tags", str(elsewhere / "report.json"))
+
+    location_tags = ("XMP-photoshop:State", "XMP-photoshop:Country", "XMP-iptcCore:CountryCode")
+    assert read_tags(lyon, *location_tags) == {
+        "XMP-photoshop:State": "Auvergne-Rhône-Alpes",
+        "XMP-photoshop:Country": "France",
+        "XMP-iptcCore:CountryCode": "FR",
+    }
+    assert read_tags(maseru, *location_tags) == {
+        "XMP-photoshop:State": "Maseru District",
+        "XMP-photoshop:Country": "Lesotho",
+        "XMP-iptcCore:CountryCode": "LS",
+    }
+    assert {photo: image_data_hash(photo) for photo in (lyon, maseru)} == image_data
