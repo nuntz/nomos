@@ -32,3 +32,7 @@ addopts = "-ra -m 'not golden'"
 markers = [
     "golden: runs against the real Dataset release (geoBoundaries CGAZ), not the fixture",
 ]
+
+[tool.uv]
+# Keep the lockfile independent of any user-level uv config (CI has none).
+exclude-newer = "7 days"
