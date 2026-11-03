@@ -1,5 +1,6 @@
 """Seam 2: the `nomos` CLI, end to end, with real ExifTool on generated JPEGs."""
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -91,6 +92,73 @@ def test_build_index_downloads_again_when_the_cached_download_does_not_verify(no
     assert "Downloading ADM1" in result.stdout
     assert "Downloading ADM0" not in result.stdout
     assert cached.read_bytes() == (FIXTURE_DATASET / "fixtureCGAZ_ADM1.geojson").read_bytes()
+
+
+def change_fixture_release(nomos, tmp_path: Path) -> Path:
+    """Point the manifest at a changed fixture release, under the same release name, in which
+    British Columbia is renamed. Returns the folder that serves it."""
+    changed = tmp_path / "changed-release"
+    shutil.copytree(FIXTURE_DATASET, changed)
+    adm1 = changed / "fixtureCGAZ_ADM1.geojson"
+    adm1.write_bytes(adm1.read_bytes().replace(b"British Columbia", b"Colombie-Britannique"))
+    manifest_path = Path(nomos.env["NOMOS_MANIFEST"])
+    write_fixture_manifest(manifest_path, dataset_dir=changed)
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"]["ADM1"]["bytes"] = adm1.stat().st_size
+    manifest["files"]["ADM1"]["sha256"] = hashlib.sha256(adm1.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    return changed
+
+
+def resolved_region(nomos, tmp_path: Path, *resolve_args: str) -> str:
+    library = tmp_path / "library"
+    if not library.exists():
+        make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+    nomos("resolve", str(library), *resolve_args)
+    report = json.loads((nomos.cwd / "nomos-report.json").read_text(encoding="utf-8"))
+    return report["photos"][0]["region"]
+
+
+def test_build_index_does_not_rebuild_an_index_that_is_up_to_date(nomos):
+    nomos("build-index")
+
+    result = nomos("build-index")
+
+    assert "Building" not in result.stdout
+    assert "up to date" in result.stdout
+
+
+def test_build_index_rebuilds_the_index_when_the_manifest_changes(nomos, tmp_path):
+    nomos("build-index")
+    assert resolved_region(nomos, tmp_path) == "British Columbia"
+    change_fixture_release(nomos, tmp_path)
+
+    nomos("build-index")
+
+    assert resolved_region(nomos, tmp_path) == "Colombie-Britannique"
+
+
+def test_resolve_never_uses_an_index_built_from_another_manifest(nomos, tmp_path):
+    nomos("build-index")
+    change_fixture_release(nomos, tmp_path)
+    library = tmp_path / "library"
+    make_geotagged_jpeg(library / "a.jpg", 55.5, -125.25)
+
+    result = nomos("resolve", str(library), check=False)
+
+    assert result.returncode != 0
+    assert "run `nomos build-index`" in result.stderr
+    assert not (nomos.cwd / "nomos-report.json").exists()
+
+
+def test_resolve_rebuilds_a_stale_index_from_verified_downloads_without_downloading(nomos, tmp_path):
+    nomos("build-index")
+    changed = change_fixture_release(nomos, tmp_path)
+    release_dir = Path(nomos.env["XDG_CACHE_HOME"]) / "nomos" / "fixture-v1"
+    shutil.copy(changed / "fixtureCGAZ_ADM1.geojson", release_dir / "fixtureCGAZ_ADM1.geojson")
+    shutil.rmtree(changed)  # any download attempt would now fail
+
+    assert resolved_region(nomos, tmp_path) == "Colombie-Britannique"
 
 
 def test_resolve_reports_the_location_of_each_photo_and_changes_no_photo(nomos, tmp_path):

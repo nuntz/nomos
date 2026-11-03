@@ -52,7 +52,7 @@ def _parser() -> argparse.ArgumentParser:
 def _build_index(args: argparse.Namespace) -> int:
     manifest = Manifest.load()
     index_path = build_index(manifest)
-    print(f"Boundary index for Dataset release {manifest.release} written to {index_path}")
+    print(f"Boundary index for Dataset release {manifest.release}: {index_path}")
     return 0
 
 
