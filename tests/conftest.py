@@ -10,11 +10,12 @@ ADM0 (Countries)
   France        FRA  [0, 5] x [40, 45]  and  [-54, -52] x [3, 5] (no ADM1 there)
   South Africa  ZAF  [20, 30] x [-30, -20] with a hole [24, 26] x [-26, -24]
   Lesotho       LSO  the hole [24, 26] x [-26, -24]
-  Fiji          FJI  [178, 180+noise] and [-180-noise, -178], x [-18, -16]
+  Fiji          FJI  [178, 180.0000000000001] and [-180, -178], x [-18, -16]
+                     (the east edge carries the same one-ulp noise as CGAZ v6.0.0)
   Vatican City  VAT  [12, 13] x [41, 42]
+  Falkland Islands (UK)  117  shapeType DISP, [-60, -58] x [-52, -51]
   South Sudan   SSD  [30, 35] x [5, 10]
   Sudan         SDN  [30, 35] x [10, 15]
-  (nothing at the Falklands: the Disputed area has no ADM0 unit)
 
 ADM1 (Regions)
   British Columbia     CAN  [-130, -120] x [50, 60]   shares lon -120 with Alberta
@@ -25,11 +26,15 @@ ADM1 (Regions)
   Maseru District      LSO  the hole
   Northern             FJI  both antimeridian pieces
   Vatican City         VAT  shapeType ADM0 (a whole-country feature)
-  Falkland Islands     XFA  shapeType DISP, [-60, -58] x [-52, -51]
+  Falkland Islands (UK) 117 shapeType DISP, shapeID DIS007, same square as in ADM0
+                            (as in CGAZ: a non-ISO shapeGroup, in both layers)
   Upper Nile           SSD  [30, 35] x [5, 9.5]
   Kordofan             SDN  [30, 35] x [9.5, 15]  (9.5..10 lies in ADM0 South Sudan)
 
-The sea west of lon -130 is the coastline gap for Nearby match tests.
+The sea west of lon -130 is the coastline gap for Nearby match tests
+(at lat 55, 5 km is about 0.078 degrees of longitude).
+
+After changing a fixture file, update its bytes and sha256 in manifest.json.
 """
 
 import json
