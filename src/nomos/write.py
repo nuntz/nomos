@@ -8,7 +8,7 @@ from enum import StrEnum
 
 from nomos.exiftool import ExifTool
 from nomos.location import Location, LookupStatus
-from nomos.report import Report
+from nomos.report import PhotoRecord, Report
 
 WRITABLE_STATUSES = {LookupStatus.MATCHED}
 
@@ -33,6 +33,15 @@ def location_tags(location: Location) -> dict[str, str]:
     return tags
 
 
+def nomos_tags(record: PhotoRecord, dataset_release: str) -> dict[str, str]:
+    """The Nomos XMP namespace fields (ADR 0001): how this photo's Location was found."""
+    return {
+        "XMP-nomos:RegionID": record.result.location.region_id,
+        "XMP-nomos:DatasetRelease": dataset_release,
+        "XMP-nomos:LookupStatus": record.result.status.value,
+    }
+
+
 def write_tags(report: Report) -> Counter[WriteOutcome]:
     """Write the report's Locations into its photos and count the Write outcomes."""
     outcomes: Counter[WriteOutcome] = Counter()
@@ -42,7 +51,8 @@ def write_tags(report: Report) -> Counter[WriteOutcome]:
             if record.result.status not in WRITABLE_STATUSES or location is None:
                 outcomes[WriteOutcome.SKIPPED_UNRESOLVED] += 1
                 continue
-            exiftool.write(report.photo_path(record), location_tags(location))
+            tags = location_tags(location) | nomos_tags(record, report.dataset_release)
+            exiftool.write(report.photo_path(record), tags)
             outcomes[WriteOutcome.WRITTEN] += 1
     return outcomes
 
