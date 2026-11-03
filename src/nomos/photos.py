@@ -11,7 +11,13 @@ from nomos.location import LookupStatus
 JPEG_SUFFIXES = {".jpg", ".jpeg"}
 READ_BATCH = 200
 
-_EXIF_GPS_TAGS = ("EXIF:GPSLatitude", "EXIF:GPSLatitudeRef", "EXIF:GPSLongitude", "EXIF:GPSLongitudeRef")
+_EXIF_GPS_TAGS = (
+    "EXIF:GPSLatitude",
+    "EXIF:GPSLatitudeRef",
+    "EXIF:GPSLongitude",
+    "EXIF:GPSLongitudeRef",
+    "EXIF:GPSStatus",
+)
 
 
 @dataclass(frozen=True)
@@ -43,12 +49,14 @@ def _gps_from_tags(tags: dict) -> GpsReading:
     # The raw values are unsigned; the sign comes from the Ref fields, applied here rather than
     # relying on ExifTool's Composite values, which silently drop the sign when a Ref is missing.
     lat, lon = tags.get("EXIF:GPSLatitude"), tags.get("EXIF:GPSLongitude")
-    if lat is None or lon is None:
+    if lat is None or lon is None or tags.get("EXIF:GPSStatus") == "V":  # "V": the fix is void
         return GpsReading(status=LookupStatus.NO_GPS)
     lat_ref, lon_ref = tags.get("EXIF:GPSLatitudeRef"), tags.get("EXIF:GPSLongitudeRef")
     if lat_ref not in ("N", "S") or lon_ref not in ("E", "W"):
         return GpsReading(status=LookupStatus.INVALID_INPUT, reason="GPS hemisphere reference missing")
-    return GpsReading(
-        latitude=-float(lat) if lat_ref == "S" else float(lat),
-        longitude=-float(lon) if lon_ref == "W" else float(lon),
-    )
+    latitude = -float(lat) if lat_ref == "S" else float(lat)
+    longitude = -float(lon) if lon_ref == "W" else float(lon)
+    if latitude == 0 and longitude == 0:
+        # A placeholder some devices write when they have no fix.
+        return GpsReading(status=LookupStatus.NO_GPS)
+    return GpsReading(latitude=latitude, longitude=longitude)
