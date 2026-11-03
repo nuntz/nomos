@@ -13,14 +13,24 @@ import shapely
 from shapely import STRtree
 
 from nomos.country_codes import alpha2_for
+from nomos.errors import NomosError
 from nomos.location import Location, LookupResult, LookupStatus
 
 # Bump when the saved index layout changes, so an old cached index is never loaded.
 INDEX_FORMAT = 1
 
+# CGAZ v6.0.0 has coordinates at 180.0000000000001 (one ulp beyond the antimeridian) where its
+# polygons are split at ±180. Boundary data may stray this far outside the lon/lat range; input
+# coordinates may not.
+COORDINATE_TOLERANCE = 1e-9
+
 
 class IndexFormatError(Exception):
     """A saved index was written by an incompatible version of Nomos."""
+
+
+class BoundaryDataError(NomosError):
+    """A boundary file is not usable as a Dataset release layer."""
 
 
 @dataclass(frozen=True)
@@ -53,9 +63,11 @@ class BoundaryIndex:
         import geopandas  # slow to import; only building needs it
 
         countries = geopandas.read_file(adm0, engine="pyogrio")
+        _check_lon_lat("ADM0", countries.total_bounds)
         country_names = dict(zip(countries["shapeGroup"], countries["shapeName"]))
 
         units = geopandas.read_file(adm1, engine="pyogrio")
+        _check_lon_lat("ADM1", units.total_bounds)
         regions = [
             _Region(name=r.shapeName, shape_id=r.shapeID, shape_group=r.shapeGroup, shape_type=r.shapeType)
             for r in units.itertuples()
@@ -103,4 +115,14 @@ class BoundaryIndex:
             country_code=alpha2_for(region.shape_group),
             region=region.name,
             region_id=region.shape_id,
+        )
+
+
+def _check_lon_lat(layer: str, bounds) -> None:
+    min_lon, min_lat, max_lon, max_lat = (float(b) for b in bounds)
+    limit_lon, limit_lat = 180 + COORDINATE_TOLERANCE, 90 + COORDINATE_TOLERANCE
+    if not (-limit_lon <= min_lon and max_lon <= limit_lon and -limit_lat <= min_lat and max_lat <= limit_lat):
+        raise BoundaryDataError(
+            f"{layer} boundary data is not in longitude and latitude degrees: its bounds are "
+            f"lon [{min_lon!r}, {max_lon!r}], lat [{min_lat!r}, {max_lat!r}]"
         )
