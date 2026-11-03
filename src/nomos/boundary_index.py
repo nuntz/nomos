@@ -47,6 +47,12 @@ class _Unit:
     shape_group: str
     shape_type: str
 
+    @property
+    def is_country(self) -> bool:
+        """Whether the unit stands for a Country rather than a Region: an ADM0 unit, or in ADM1 a
+        whole-country feature (such as Vatican City) or a Disputed area."""
+        return self.shape_type != "ADM1"
+
 
 class _Layer:
     """One layer's units, with every polygon component indexed on its own, so that a Country made
@@ -138,23 +144,41 @@ class BoundaryIndex:
         # 3 and 4. A point in at least one Region is matched or ambiguous.
         if regions:
             return self._resolve_regions(regions, countries)
-        # 5 (a Nearby match) and 6 (a Country-only Location) are tried here, before no match.
+        # 5. A Nearby match (#7) goes here, before the Country-only Location of step 6.
+        # 6. A point in a Country but in no Region gets a Country-only Location.
+        if countries:
+            return self._resolve_countries(countries)
         return LookupResult(LookupStatus.NO_MATCH)
 
     def _resolve_regions(self, regions: list[_Unit], countries: list[_Unit]) -> LookupResult:
         """Matched when exactly one Region covers the point and its Country is a containing
-        Country (or no Country contains it). Otherwise ambiguous, listing every Region and every
+        Country (or no Country contains it); country only instead when that ADM1 feature is a
+        whole Country or a Disputed area. Otherwise ambiguous, listing every Region and every
         containing Country that none of those Regions belongs to."""
         containing = {country.shape_group for country in countries}
         if len(regions) == 1 and (not containing or regions[0].shape_group in containing):
-            return LookupResult(LookupStatus.MATCHED, self._region_location(regions[0]))
+            status = LookupStatus.COUNTRY_ONLY if regions[0].is_country else LookupStatus.MATCHED
+            return LookupResult(status, self._region_location(regions[0]))
         region_countries = {region.shape_group for region in regions}
         candidates = [self._region_location(region) for region in regions] + [
             self._country_location(country) for country in countries if country.shape_group not in region_countries
         ]
         return LookupResult(LookupStatus.AMBIGUOUS, candidates=tuple(candidates))
 
+    def _resolve_countries(self, countries: list[_Unit]) -> LookupResult:
+        """Country only when exactly one Country contains the point. A point on a border between
+        Countries, in no Region, is ambiguous between them."""
+        if len(countries) == 1:
+            return LookupResult(LookupStatus.COUNTRY_ONLY, self._country_location(countries[0]))
+        return LookupResult(
+            LookupStatus.AMBIGUOUS, candidates=tuple(self._country_location(country) for country in countries)
+        )
+
     def _region_location(self, region: _Unit) -> Location:
+        """The Location of an ADM1 feature. A whole-country or Disputed-area feature gives a
+        Country-only Location, never "Vatican City, Vatican City"."""
+        if region.is_country:
+            return self._country_location(region)
         return Location(
             country=self._country_names.get(region.shape_group, region.shape_group),
             country_code=alpha2_for(region.shape_group),
@@ -163,7 +187,8 @@ class BoundaryIndex:
         )
 
     def _country_location(self, country: _Unit) -> Location:
-        """The Country-only Location of an ADM0 unit. A Disputed area has no country code."""
+        """The Country-only Location of a unit that stands for a Country, under the dataset's name
+        for it. A Disputed area has no country code, even when its shapeGroup is an ISO code."""
         code = None if country.shape_type == "DISP" else alpha2_for(country.shape_group)
         return Location(country=country.name, country_code=code)
 

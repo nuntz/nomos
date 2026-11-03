@@ -173,3 +173,30 @@ def test_coordinates_that_are_not_finite_or_out_of_range_are_invalid_input_with_
 @pytest.mark.parametrize("lat, lon", [(90.0, 0.0), (-90.0, 0.0)], ids=["North Pole", "South Pole"])
 def test_the_poles_are_valid_input(index, lat, lon):
     assert index.lookup(lat, lon).status is not LookupStatus.INVALID_INPUT
+
+
+def test_point_in_a_country_but_in_no_region_is_a_country_only_location(index):
+    # France's second square, like French Guiana, has no ADM1 unit and none within reach.
+    result = index.lookup(4.0, -53.0)
+
+    assert result.status is LookupStatus.COUNTRY_ONLY
+    assert result.location == Location("France", "FR")
+    assert result.location.caption == "France"
+
+
+def test_point_in_a_whole_country_feature_is_a_country_only_location_not_region_and_country(index):
+    # Vatican City's ADM1 feature is the whole Country (shapeType ADM0).
+    result = index.lookup(41.5, 12.5)
+
+    assert result.status is LookupStatus.COUNTRY_ONLY
+    assert result.location == Location("Vatican City", "VA")
+    assert result.location.caption == "Vatican City"
+
+
+def test_point_in_a_disputed_area_is_a_country_only_location_under_its_dataset_name_with_no_code(index):
+    # The Falklands' ADM1 feature is a Disputed area (shapeType DISP, non-ISO shapeGroup 117).
+    result = index.lookup(-51.5, -59.0)
+
+    assert result.status is LookupStatus.COUNTRY_ONLY
+    assert result.location == Location("Falkland Islands (UK)", None)
+    assert result.location.caption == "Falkland Islands (UK)"
