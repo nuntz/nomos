@@ -11,7 +11,7 @@ from nomos.exiftool import find_exiftool
 from nomos.report import DEFAULT_REPORT, Report
 from nomos.resolve import resolve_library
 from nomos.write import summary as write_summary
-from nomos.write import WriteOutcome, write_tags
+from nomos.write import WriteOptions, WriteOutcome, write_tags
 
 
 ATTRIBUTION = "Boundary data from geoBoundaries (www.geoboundaries.org), CC BY 4.0."
@@ -93,12 +93,10 @@ def _resolve(args: argparse.Namespace) -> int:
 
 def _write_tags(args: argparse.Namespace) -> int:
     report = Report.load(args.report)
+    options = WriteOptions(iptc=args.iptc, overwrite=args.overwrite, in_place=args.in_place, warn=_warn)
     outcomes = write_tags(
         report,
-        iptc=args.iptc,
-        overwrite=args.overwrite,
-        in_place=args.in_place,
-        warn=_warn,
+        options,
         on_outcome=lambda record, outcome: print(f"{outcome} {record.path}", flush=True),
     )
     if outcomes[WriteOutcome.WRITTEN] and not args.in_place:
